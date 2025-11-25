@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>StampCam (Tap Drawers + Wide Zoom + Torch)</title>
+<title>StampCam (99 + "-" label, Tap Drawers + Wide Zoom + Torch + VolumeShot)</title>
 <style>
   :root{--sa-b:env(safe-area-inset-bottom,0px);--sa-l:env(safe-area-inset-left,0px);--sa-r:env(safe-area-inset-right,0px)}
   *{box-sizing:border-box}
@@ -10,7 +10,7 @@
   button{padding:10px;border:1px solid #ccc;border-radius:10px;background:#fff}
   small{color:#666}
 
-  /* Bottom dock (stacked: zoom bar on top, buttons row below) */
+  /* Bottom dock (zoom bar on top, buttons row below) */
   .dock{
     position:fixed;left:0;right:0;bottom:0;z-index:20;
     background:linear-gradient(180deg, rgba(255,255,255,0.0) 0%, rgba(250,250,250,0.96) 30%);
@@ -18,9 +18,7 @@
     padding:8px max(10px,var(--sa-r)) calc(10px + var(--sa-b)) max(10px,var(--sa-l));
     gap:6px;backdrop-filter: blur(6px);
   }
-  .zoomBar{
-    width:96%;display:flex;align-items:center;gap:10px;
-  }
+  .zoomBar{width:96%;display:flex;align-items:center;gap:10px;}
   .zoomBar label{min-width:48px;color:#333}
   .zoomBar input[type=range]{flex:1;height:32px}
   .cap-badge{font-size:14px;color:#444;min-width:56px;text-align:right}
@@ -31,7 +29,7 @@
   }
   #torchBtn.torch-on{background:#ffc400;border-color:#e6b100}
 
-  /* Tap side toggles */
+  /* Side toggles */
   .toggle{
     position:fixed;top:50%;transform:translateY(-50%);
     z-index:35;display:flex;align-items:center;justify-content:center;
@@ -57,8 +55,22 @@
   .input-row input[type=text]{flex:1;min-width:140px;padding:10px;border:1px solid #666;border-radius:10px;background:#000;color:#fff}
   .legend{font-size:12px;color:#bbb}
   .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
-  .on{background:#222;color:#fff}
-  .shot{background:#0a66c2;color:#fff;border-color:#0a66c2}
+
+  /* 押下状態表示（選択状態・撮影済み可視化・押下感） */
+  .grid button{ position:relative; transition: transform .05s ease, box-shadow .15s ease, filter .15s ease; }
+  .grid button:active{ transform: scale(.97); }             /* 押した瞬間の縮小 */
+  .grid button.on{ box-shadow: 0 0 0 2px #222 inset; }      /* 選択中（未撮影） */
+  .grid button.shot{ background:#0a66c2; color:#fff; border-color:#0a66c2; } /* 撮影済み（青） */
+  .grid button.shot.on{
+    box-shadow: 0 0 0 3px #ffd400, inset 0 0 0 2px rgba(0,0,0,.12);          /* 撮影済み＋選択中：黄色リング */
+  }
+  .grid button.shot.on::after{
+    content:"選択中"; position:absolute; top:-8px; right:-4px;
+    background:#ffd400; color:#111; font-size:10px; line-height:1; padding:2px 6px; border-radius:10px;
+  }
+  /* 「-」ボタンの識別（任意） */
+  .grid button.label-dash { background:#eee; }
+  .grid button.label-dash.on{ box-shadow: 0 0 0 2px #222 inset, 0 0 0 2px #ffd400; }
 
   /* Right drawer (preview) */
   .rdrawer{
@@ -110,7 +122,7 @@
       <input id="suffixInput" type="text" placeholder="ファイル名に付加（例：1F-東, 盤A, ONU周り）">
       <button id="resetMarkBtn" title="撮影済みマークをリセット">リセット</button>
     </div>
-    <div class="legend">選択中: 黒 / 撮影済み: 青</div>
+    <div class="legend">選択中: 黒 / 撮影済み: 青 / 「-」はそのままファイル名に</div>
     <div id="nums" class="grid"></div>
   </div>
 </aside>
@@ -141,21 +153,32 @@
   let videoTrack=null;
   let torchOn=false;
 
-  // Build device buttons
-  for(let i=1;i<=50;i++){
+  /* ---------- Build device buttons: "-" then 1..99 ---------- */
+  const dashBtn=document.createElement('button');
+  dashBtn.textContent='-';
+  dashBtn.classList.add('label-dash');
+  dashBtn.onclick=()=>{ setLabel('-'); };
+  nums.appendChild(dashBtn);
+
+  for(let i=1;i<=99;i++){
     const b=document.createElement('button');
     b.textContent='機器'+i;
     b.onclick=()=>{ setLabel(b.textContent); };
     nums.appendChild(b);
   }
+
   function setLabel(t){
     currentLabel=t;
-    [...nums.children].forEach(x=>x.classList.toggle('on', x.textContent===t));
+    [...nums.children].forEach(x=>{
+      const on = (x.textContent===t);
+      x.classList.toggle('on', on);
+      x.setAttribute('aria-pressed', on); // 押下状態の明示（スクリーンリーダ対策にも）
+    });
   }
 
-  // Camera
+  /* ---------- Camera ---------- */
   async function startCamera(){
-    if(stream){stream.getTracks().forEach(t=>t.stop());}
+    stopStream();
     const w=useHigh?3840:1280,h=useHigh?2160:720;
     try{
       stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:w},height:{ideal:h}},audio:false});
@@ -225,11 +248,11 @@
 
   resBtn.onclick=async()=>{useHigh=!useHigh;resBtn.textContent='解像度：'+(useHigh?'3840×2160':'1280×720');await startCamera();};
 
-  // Capture & save
-  function ts(){const d=new Date(),z=n=>String(n).padStart(2,'0');return`${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}_${z(d.getHours())}-${z(d.getMinutes())}_${z(d.getSeconds())}`;}
+  /* ---------- Capture & save ---------- */
+  function ts(){const d=new Date(),z=n=>String(n).padStart(2,'0');return`${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}_${z(d.getHours())}-${z(d.getMinutes())}-${z(d.getSeconds())}`;}
   async function captureFrame(){const vw=v.videoWidth,vh=v.videoHeight;if(!vw||!vh)throw'初期化待ち';c.width=vw;c.height=vh;ctx.drawImage(v,0,0,vw,vh);return new Promise(r=>c.toBlob(r,'image/jpeg',0.9));}
 
-  shootBtn.onclick=async()=>{
+  async function doShoot(){
     const label=(currentLabel||'未指定').trim();
     try{
       const safe=s=>s.replace(/[\\/:*?"<>|]/g,'_');
@@ -244,8 +267,8 @@
       if(previewUrl)URL.revokeObjectURL(previewUrl);
       previewUrl=URL.createObjectURL(blob);img.src=previewUrl;
 
-      // shot mark
-      if(label && label!=='未指定'){
+      // shot mark (except "-" and "未指定")
+      if(label && label!=='未指定' && label!=='-'){
         const btn=[...nums.children].find(x=>x.textContent===label);
         if(btn) btn.classList.add('shot');
       }
@@ -253,21 +276,20 @@
       // auto open right preview briefly
       if(!rightOpen){openRight(true);setTimeout(()=>openRight(false),1200);}
     }catch(e){alert(e);}
-  };
+  }
+  shootBtn.onclick=doShoot;
 
   resetMarkBtn.onclick=()=>{[...nums.children].forEach(x=>x.classList.remove('shot'));};
 
-  // Drawer helpers
+  /* ---------- Drawers ---------- */
   function openLeft(open){ leftOpen=!!open; ldrawer.classList.toggle('open', leftOpen); }
   function openRight(open){ rightOpen=!!open; rdrawer.classList.toggle('open', rightOpen); }
-
-  // Tap toggles
   lToggle.addEventListener('click',()=>openLeft(!leftOpen));
   rToggle.addEventListener('click',()=>openRight(!rightOpen));
   lClose.addEventListener('click',()=>openLeft(false));
   rClose.addEventListener('click',()=>openRight(false));
 
-  // Zoom & pan for right preview (image)
+  /* ---------- Preview (pinch zoom / drag) ---------- */
   let scale=1,lastScale=1,startDist=0,startX2=0,startY2=0,imgX=0,imgY=0,lastX=0,lastY=0;
   let doubleTapTime=0;
   function getDist(e){if(e.touches.length<2)return 0;const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;return Math.sqrt(dx*dx+dy*dy);}
@@ -275,11 +297,8 @@
     if(e.touches.length===1){
       const now=Date.now();
       if(now-doubleTapTime<300){scale=scale>1?1:2;imgX=0;imgY=0;updateTransform();return;}
-      doubleTapTime=now;
-      startX2=e.touches[0].clientX;startY2=e.touches[0].clientY;
-    }else if(e.touches.length===2){
-      startDist=getDist(e);lastScale=scale;
-    }
+      doubleTapTime=now;startX2=e.touches[0].clientX;startY2=e.touches[0].clientY;
+    }else if(e.touches.length===2){startDist=getDist(e);lastScale=scale;}
   },{passive:true});
   img.addEventListener('touchmove',e=>{
     if(e.touches.length===1&&scale>1){
@@ -291,6 +310,18 @@
   },{passive:true});
   img.addEventListener('touchend',()=>{lastX=imgX;lastY=imgY;lastScale=scale;});
   function updateTransform(){img.style.transform=`translate(calc(-50% + ${imgX}px),calc(-50% + ${imgY}px)) scale(${scale})`;img.style.transition='none';}
+
+  /* ---------- Volume-down trigger (Android Chrome etc.) ---------- */
+  window.addEventListener('keydown',e=>{
+    if(e.key==="AudioVolumeDown"||e.key==="VolumeDown"||e.code==="VolumeDown"){
+      e.preventDefault();doShoot();
+    }
+  });
+
+  /* ---------- Stop camera on leave (stability) ---------- */
+  function stopStream(){ try{ stream && stream.getTracks().forEach(t=>t.stop()); }catch{} }
+  window.addEventListener('pagehide', stopStream);
+  document.addEventListener('visibilitychange', ()=>{ if (document.hidden) stopStream(); });
 
   await startCamera();
 })();
