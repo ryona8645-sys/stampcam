@@ -23,9 +23,16 @@
   .zoomBar label{min-width:40px;font-size:12px}
   .zoomBar input[type=range]{flex:1;height:26px}
   .cap-badge{font-size:12px;min-width:48px;text-align:right}
-  /* ボタン行：中央に撮影ボタン、両脇にライト/解像度 */
-  .btnRow{width:96%;display:grid;grid-template-columns:1fr auto 1fr;align-items:center}
+  /* ボタン行：中央に撮影ボタン、左にライト、右に解像度（解像度は右端寄せ） */
+  .btnRow{
+    width:96%;
+    display:grid;
+    grid-template-columns: 1fr auto minmax(0,1fr);
+    align-items:center;
+  }
   .leftBtns,.rightBtns{display:flex;gap:8px;align-items:center}
+  .rightBtns{justify-content:flex-end;width:100%}
+  #resBtn{margin-left:auto}
   .iconBtn{height:40px;padding:0 10px;border-radius:10px;font-size:12px}
   #shootBtn{
     border:none;width:68px;height:68px;border-radius:999px;background:#fff;
@@ -119,7 +126,7 @@
     <span id="zoomVal" class="cap-badge">x1.0</span>
   </div>
 
-  <!-- 中央に撮影、左にライト、右に解像度 -->
+  <!-- 中央に撮影、左にライト、右に解像度（右端寄せ） -->
   <div class="btnRow">
     <div class="leftBtns">
       <button id="torchBtn" class="iconBtn" title="ライト（トーチ）">ライト</button>
