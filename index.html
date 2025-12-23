@@ -1,14 +1,13 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>StampCam (コンパクトUI/大きい撮影画面/保存方式切替/黄リング/99 + "-")</title>
+<title>StampCam (枚数バッジ付/コンパクトUI/保存方式切替/黄リング/99 + "-")</title>
 <style>
   :root{--sa-b:env(safe-area-inset-bottom,0px);--sa-l:env(safe-area-inset-left,0px);--sa-r:env(safe-area-inset-right,0px)}
   *{box-sizing:border-box}
   body{font-family:sans-serif;margin:10px 10px calc(140px + var(--sa-b));background:#000}
   video{width:100%;max-height:78vh;object-fit:contain;background:#000;border-radius:8px}
   button{padding:10px;border:1px solid #ccc;border-radius:10px;background:#fff;cursor:pointer}
-  small{color:#666}
 
   /* Bottom dock（コンパクト配置） */
   .dock{
@@ -18,12 +17,12 @@
     padding:6px max(10px,var(--sa-r)) calc(8px + var(--sa-b)) max(10px,var(--sa-l));
     gap:6px;backdrop-filter: blur(4px);color:#eee
   }
-  /* 細いズームバー */
   .zoomBar{width:96%;display:flex;align-items:center;gap:8px}
   .zoomBar label{min-width:40px;font-size:12px}
   .zoomBar input[type=range]{flex:1;height:26px}
   .cap-badge{font-size:12px;min-width:48px;text-align:right}
-  /* ボタン行：中央に撮影ボタン、左にライト、右に解像度（解像度は右端寄せ） */
+
+  /* ボタン行：中央に撮影ボタン、左にライト、右に解像度（右端寄せ） */
   .btnRow{
     width:96%;
     display:grid;
@@ -66,10 +65,10 @@
   .legend{font-size:12px;color:#bbb}
   .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
 
-  /* 押下表示：黄リング／撮影済み：青 */
+  /* 押下表示：黄リング／撮影済み：青／枚数バッジ */
   .grid button{
     width:100%;position:relative;transition:transform .05s ease, box-shadow .15s ease, filter .15s ease;
-    font-variant-numeric:tabular-nums;
+    font-variant-numeric:tabular-nums;padding-right:26px; /* バッジ分の余白 */
   }
   .grid button:active{transform:scale(.97)}
   .grid button.on{ box-shadow:0 0 0 3px #ffd400 inset }
@@ -79,6 +78,12 @@
     content:"選択中";position:absolute;top:-8px;right:-4px;background:#ffd400;color:#111;
     font-size:10px;line-height:1;padding:2px 6px;border-radius:10px
   }
+  .badge{
+    position:absolute;top:4px;right:4px;min-width:18px;height:18px;
+    background:#ff5722;color:#fff;border-radius:9px;font-size:11px;line-height:18px;
+    text-align:center;padding:0 5px;box-shadow:0 1px 4px rgba(0,0,0,.25);display:none;
+  }
+  .badge.show{display:inline-block}
   .grid button.label-dash{background:#eee}
   .grid button.label-dash.on{box-shadow:0 0 0 3px #ffd400 inset}
 
@@ -151,9 +156,9 @@
   <div class="ld-body">
     <div class="input-row">
       <input id="suffixInput" type="text" placeholder="ファイル名に付加（例：1F-東, 盤A, ONU周り）">
-      <button id="resetMarkBtn" title="撮影済みマークをリセット">リセット</button>
+      <button id="resetMarkBtn" title="撮影済みマークと枚数をリセット">リセット</button>
     </div>
-    <div class="legend">選択: 黄リング / 撮影済み: 青 / 「-」はそのままファイル名に</div>
+    <div class="legend">選択: 黄リング / 撮影済み: 青 / 右上の丸が「撮影枚数」 / 「-」はそのままファイル名に</div>
     <div id="nums" class="grid"></div>
   </div>
 </aside>
@@ -206,6 +211,31 @@
     toastTimer=setTimeout(()=>{ toastEl.classList.remove('show'); }, 2000);
   }
 
+  /* ---------- 撮影枚数カウンタ ---------- */
+  const shotCounts = new Map(); // key: label (例 '機器1' / '-'), value: number
+  function getBtnByLabel(label){
+    return [...nums.children].find(x=>(x.dataset.label && x.dataset.label===label)||(!x.dataset.label && x.textContent===label));
+  }
+  function setCount(label, n){
+    shotCounts.set(label, n);
+    const btn = getBtnByLabel(label);
+    if(!btn) return;
+    let badge = btn.querySelector('.badge');
+    if(!badge){ badge = document.createElement('span'); badge.className='badge'; btn.appendChild(badge); }
+    badge.textContent = String(n);
+    badge.classList.toggle('show', n>0);
+  }
+  function incCount(label){
+    const cur = shotCounts.get(label) || 0;
+    setCount(label, cur+1);
+  }
+  function resetAllCounts(){
+    shotCounts.clear();
+    [...nums.children].forEach(btn=>{
+      const b = btn.querySelector('.badge'); if(b){ b.textContent='0'; b.classList.remove('show'); }
+    });
+  }
+
   /* ---------- Buttons: "-" then 1..99 ---------- */
   const dashBtn=document.createElement('button');
   dashBtn.textContent='-'; dashBtn.classList.add('label-dash'); dashBtn.dataset.label='-';
@@ -218,6 +248,8 @@
     b.onclick=()=>setLabel(b.dataset.label);
     nums.appendChild(b);
   }
+  // 初期化：全ボタンのバッジを0表示（非表示）
+  setTimeout(()=>{ [...nums.children].forEach(btn=>setCount(btn.dataset.label||btn.textContent, 0)); },0);
 
   function setLabel(label){
     currentLabel=label;
@@ -365,10 +397,11 @@
       previewUrl=URL.createObjectURL(blob); img.src=previewUrl;
       resetPreviewTransform();
 
-      // 保存成功時のみ撮影済みマーキング
-      if(label && label!=='未指定' && label!=='-'){
-        const btn=[...nums.children].find(x=>(x.dataset.label && x.dataset.label===label)||(!x.dataset.label && x.textContent===label));
-        if(btn) btn.classList.add('shot');
+      // 保存成功時のみ撮影済みマーキング＋枚数加算
+      if(label && label!=='未指定'){
+        const btn=getBtnByLabel(label);
+        if(btn){ btn.classList.add('shot'); }
+        incCount(label); // 「-」も含め、選択していればカウント
       }
 
       // メッセージ
@@ -389,7 +422,10 @@
   }
   shootBtn.addEventListener('click', doShoot);
 
-  resetMarkBtn.addEventListener('click', ()=>{ [...nums.children].forEach(x=>x.classList.remove('shot')); });
+  resetMarkBtn.addEventListener('click', ()=>{
+    [...nums.children].forEach(x=>x.classList.remove('shot'));
+    resetAllCounts();
+  });
 
   /* ---------- Drawers ---------- */
   function openLeft(open){ leftOpen=!!open; ldrawer.classList.toggle('open', leftOpen); }
