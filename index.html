@@ -1,13 +1,20 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>StampCam (枚数バッジ付/コンパクトUI/保存方式切替/黄リング/99 + "-")</title>
+<title>StampCam (ドロワー外タップで閉じる/枚数バッジ/コンパクトUI/保存方式切替/黄リング/99 + "-")</title>
 <style>
   :root{--sa-b:env(safe-area-inset-bottom,0px);--sa-l:env(safe-area-inset-left,0px);--sa-r:env(safe-area-inset-right,0px)}
   *{box-sizing:border-box}
   body{font-family:sans-serif;margin:10px 10px calc(140px + var(--sa-b));background:#000}
   video{width:100%;max-height:78vh;object-fit:contain;background:#000;border-radius:8px}
   button{padding:10px;border:1px solid #ccc;border-radius:10px;background:#fff;cursor:pointer}
+
+  /* Backdrop for drawers */
+  .backdrop{
+    position:fixed;inset:0;z-index:25;background:rgba(0,0,0,.3);
+    opacity:0;pointer-events:none;transition:opacity .2s ease;
+  }
+  .backdrop.show{opacity:1;pointer-events:auto}
 
   /* Bottom dock（コンパクト配置） */
   .dock{
@@ -68,7 +75,7 @@
   /* 押下表示：黄リング／撮影済み：青／枚数バッジ */
   .grid button{
     width:100%;position:relative;transition:transform .05s ease, box-shadow .15s ease, filter .15s ease;
-    font-variant-numeric:tabular-nums;padding-right:26px; /* バッジ分の余白 */
+    font-variant-numeric:tabular-nums;padding-right:26px;
   }
   .grid button:active{transform:scale(.97)}
   .grid button.on{ box-shadow:0 0 0 3px #ffd400 inset }
@@ -124,14 +131,11 @@
 </div>
 
 <div class="dock">
-  <!-- 細いズーム＆倍率表示 -->
   <div class="zoomBar">
     <label for="zoomRange">ズーム</label>
     <input id="zoomRange" type="range" min="1" max="1" step="0.1" value="1" disabled>
     <span id="zoomVal" class="cap-badge">x1.0</span>
   </div>
-
-  <!-- 中央に撮影、左にライト、右に解像度（右端寄せ） -->
   <div class="btnRow">
     <div class="leftBtns">
       <button id="torchBtn" class="iconBtn" title="ライト（トーチ）">ライト</button>
@@ -147,6 +151,9 @@
 <div class="toggle l-toggle" id="lToggle">機器/入力</div>
 <div class="toggle r-toggle" id="rToggle">プレビュー</div>
 
+<!-- Backdrop (outside tap to close drawers) -->
+<div id="backdrop" class="backdrop" aria-hidden="true"></div>
+
 <!-- Left drawer -->
 <aside id="ldrawer" class="ldrawer" aria-label="機器選択とファイル名付加">
   <div class="ld-header">
@@ -158,7 +165,7 @@
       <input id="suffixInput" type="text" placeholder="ファイル名に付加（例：1F-東, 盤A, ONU周り）">
       <button id="resetMarkBtn" title="撮影済みマークと枚数をリセット">リセット</button>
     </div>
-    <div class="legend">選択: 黄リング / 撮影済み: 青 / 右上の丸が「撮影枚数」 / 「-」はそのままファイル名に</div>
+    <div class="legend">選択: 黄リング / 撮影済み: 青 / 右上の丸が撮影枚数 / 「-」はそのままファイル名に</div>
     <div id="nums" class="grid"></div>
   </div>
 </aside>
@@ -190,6 +197,7 @@
   const torchBtn=document.getElementById('torchBtn');
   const pinchHint=document.getElementById('pinchHint');
   const toastEl=document.getElementById('toast');
+  const backdrop=document.getElementById('backdrop');
 
   let stream=null,useHigh=false,currentLabel='',previewUrl=null;
   let leftOpen=false, rightOpen=false;
@@ -197,10 +205,7 @@
   let torchOn=false;
 
   /* ==== 保存方式設定 ==== */
-  // 'auto'  : a[download] で即ダウンロード（「開始」表示）
-  // 'opfs'  : サイト専用領域へ自動保存（「完了」表示）
-  // 'picker': 保存ダイアログ（「完了」表示）
-  const SAVE_MODE = 'auto';
+  const SAVE_MODE = 'auto'; // 'auto' | 'opfs' | 'picker'
 
   /* ---------- Toast ---------- */
   let toastTimer=null;
@@ -212,7 +217,7 @@
   }
 
   /* ---------- 撮影枚数カウンタ ---------- */
-  const shotCounts = new Map(); // key: label (例 '機器1' / '-'), value: number
+  const shotCounts = new Map();
   function getBtnByLabel(label){
     return [...nums.children].find(x=>(x.dataset.label && x.dataset.label===label)||(!x.dataset.label && x.textContent===label));
   }
@@ -243,12 +248,11 @@
 
   for(let i=1;i<=99;i++){
     const b=document.createElement('button');
-    b.textContent='機器'+String(i).padStart(2,'0'); // 表示は桁揃え
-    b.dataset.label='機器'+i;                        // 保存名は従来表記
+    b.textContent='機器'+String(i).padStart(2,'0');
+    b.dataset.label='機器'+i;
     b.onclick=()=>setLabel(b.dataset.label);
     nums.appendChild(b);
   }
-  // 初期化：全ボタンのバッジを0表示（非表示）
   setTimeout(()=>{ [...nums.children].forEach(btn=>setCount(btn.dataset.label||btn.textContent, 0)); },0);
 
   function setLabel(label){
@@ -332,7 +336,7 @@
         a.href=url; a.download=filename;
         document.body.appendChild(a); a.click(); a.remove();
         setTimeout(()=>URL.revokeObjectURL(url),2000);
-        return 'download'; // 完了はOS任せ
+        return 'download';
       }catch(e){ throw new Error('自動ダウンロードに失敗: '+e.message); }
     }
 
@@ -344,7 +348,7 @@
         const root = await navigator.storage.getDirectory();
         const handle = await root.getFileHandle(filename, { create:true });
         const w = await handle.createWritable(); await w.write(blob); await w.close();
-        return 'opfs'; // 確定保存
+        return 'opfs';
       }catch(e){ throw new Error('OPFSへの保存に失敗: '+e.message); }
     }
 
@@ -355,7 +359,7 @@
           types:[{description:'JPEG Image', accept:{'image/jpeg':['.jpg','.jpeg']}}]
         });
         const w=await handle.createWritable(); await w.write(blob); await w.close();
-        return 'fs'; // 確定保存
+        return 'fs';
       }catch(e){
         if (e && (e.name==='AbortError' || e.code===20)) throw new Error('保存をキャンセルしました');
         throw new Error('保存に失敗（File Picker）: '+e.message);
@@ -389,22 +393,18 @@
       const suffix=extra?('_'+safe(extra)):'';
       const filename=safe(`${label}${suffix}_${ts()}.jpg`);
 
-      // 保存
       const how = await saveBlob(blob, filename);
 
-      // プレビュー更新（撮影時に拡大状態をリセット）
       if(previewUrl) URL.revokeObjectURL(previewUrl);
       previewUrl=URL.createObjectURL(blob); img.src=previewUrl;
       resetPreviewTransform();
 
-      // 保存成功時のみ撮影済みマーキング＋枚数加算
       if(label && label!=='未指定'){
         const btn=getBtnByLabel(label);
         if(btn){ btn.classList.add('shot'); }
-        incCount(label); // 「-」も含め、選択していればカウント
+        incCount(label);
       }
 
-      // メッセージ
       if (how==='opfs' || how==='fs') {
         toast('ダウンロード完了','ok');
       } else if (how==='download') {
@@ -417,7 +417,7 @@
     }catch(e){
       toast(e.message || '保存に失敗しました','err');
     }finally{
-      ensureStreamAlive(); // 復帰直後の黒画面対策
+      ensureStreamAlive();
     }
   }
   shootBtn.addEventListener('click', doShoot);
@@ -428,12 +428,27 @@
   });
 
   /* ---------- Drawers ---------- */
-  function openLeft(open){ leftOpen=!!open; ldrawer.classList.toggle('open', leftOpen); }
-  function openRight(open){ rightOpen=!!open; rdrawer.classList.toggle('open', rightOpen); }
+  function refreshBackdrop(){
+    backdrop.classList.toggle('show', leftOpen || rightOpen);
+  }
+  function openLeft(open){ leftOpen=!!open; ldrawer.classList.toggle('open', leftOpen); refreshBackdrop(); }
+  function openRight(open){ rightOpen=!!open; rdrawer.classList.toggle('open', rightOpen); refreshBackdrop(); }
+
   lToggle.addEventListener('click',()=>openLeft(!leftOpen));
   rToggle.addEventListener('click',()=>openRight(!rightOpen));
   lClose.addEventListener('click',()=>openLeft(false));
   rClose.addEventListener('click',()=>openRight(false));
+
+  // 外側タップで両方閉じる
+  backdrop.addEventListener('click', ()=>{ openLeft(false); openRight(false); });
+
+  // ESCで閉じる（片方でも開いていれば閉じる）
+  window.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&(leftOpen||rightOpen)){
+      e.preventDefault();
+      openLeft(false); openRight(false);
+    }
+  });
 
   /* ---------- Preview (pinch zoom / drag) ---------- */
   function getDist(e){if(e.touches.length<2)return 0;const dx=e.touches[0].clientX-e.touches[1].clientX,dy=e.touches[0].clientY-e.touches[1].clientY;return Math.sqrt(dx*dx+dy*dy);}
