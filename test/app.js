@@ -8,58 +8,6 @@ const KIND_LABEL = {
   label: "ラベル"
 };
 
-async function makeThumbnail(blob, maxSide = 320, quality = 0.7) {
-  const bmp = await createImageBitmap(blob);
-  const scale = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
-  const w = Math.max(1, Math.round(bmp.width * scale));
-  const h = Math.max(1, Math.round(bmp.height * scale));
-
-  const c = document.createElement("canvas");
-  c.width = w;
-  c.height = h;
-  const ctx = c.getContext("2d", { alpha: false });
-  ctx.drawImage(bmp, 0, 0, w, h);
-
-  const thumb = await new Promise((resolve) => c.toBlob(resolve, "image/jpeg", quality));
-  bmp.close?.();
-  if (!thumb) throw new Error("thumb gen failed");
-  return { thumb, w, h };
-}
-
-async function checkStorage() {
-  const out = document.getElementById("storageWarn");
-  if (!out) return;
-
-  if (!navigator.storage?.estimate) {
-    out.textContent = "容量:取得不可";
-    return;
-  }
-
-  try {
-    const { usage, quota } = await navigator.storage.estimate();
-    if (!usage || !quota) {
-      out.textContent = "容量:不明";
-      return;
-    }
-
-    const ratio = usage / quota;
-    const usedMB = Math.round(usage / (1024 * 1024));
-    const quotaMB = Math.round(quota / (1024 * 1024));
-
-    // 閾値：85%で警告、92%で強警告
-    if (ratio >= 0.92) {
-      out.textContent = `容量:危険 ${usedMB}/${quotaMB}MB（ZIP出力して削除推奨）`;
-    } else if (ratio >= 0.85) {
-      out.textContent = `容量:警告 ${usedMB}/${quotaMB}MB`;
-    } else {
-      out.textContent = `容量:${usedMB}/${quotaMB}MB`;
-    }
-  } catch {
-    out.textContent = "容量:エラー";
-  }
-}
-
-
 const db = openDb();
 
 const el = {
@@ -81,7 +29,7 @@ const el = {
   shotMeta: document.getElementById("shotMeta"),
 
   btnExport: document.getElementById("btnExport"),
-  btnWipe: document.getElementById("btnWipe")
+  btnWipe: document.getElementById("btnWipe"),
 
   preview: document.getElementById("preview"),
   previewImg: document.getElementById("previewImg"),
@@ -96,6 +44,33 @@ let stream = null;
 
 let previewUrl = null;
 let zoom = 1;
+
+async function registerSw() {
+  if (!("serviceWorker" in navigator)) return;
+  try {
+    await navigator.serviceWorker.register("./sw.js", { scope: "./" });
+  } catch (e) {
+    console.warn("SW register failed:", e);
+  }
+}
+
+async function makeThumbnail(blob, maxSide = 320, quality = 0.7) {
+  const bmp = await createImageBitmap(blob);
+  const scale = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
+  const w = Math.max(1, Math.round(bmp.width * scale));
+  const h = Math.max(1, Math.round(bmp.height * scale));
+
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext("2d", { alpha: false });
+  ctx.drawImage(bmp, 0, 0, w, h);
+
+  const thumb = await new Promise((resolve) => c.toBlob(resolve, "image/jpeg", quality));
+  bmp.close?.();
+  if (!thumb) throw new Error("thumb gen failed");
+  return { thumb, w, h };
+}
 
 function openPreview(title, blob) {
   if (previewUrl) URL.revokeObjectURL(previewUrl);
@@ -120,16 +95,6 @@ function closePreview() {
 function setZoom(next) {
   zoom = Math.max(0.25, Math.min(6, next));
   el.previewImg.style.transform = `scale(${zoom})`;
-}
-
-
-async function registerSw() {
-  if (!("serviceWorker" in navigator)) return;
-  try {
-    await navigator.serviceWorker.register("./sw.js", { scope: "./" });
-  } catch (e) {
-    console.warn("SW register failed:", e);
-  }
 }
 
 function nowIsoSafe() {
@@ -241,7 +206,6 @@ async function takeShot() {
   const blob = await new Promise((resolve) => c.toBlob(resolve, "image/jpeg", 0.85));
   if (!blob) return alert("撮影失敗");
 
-  // サムネ生成（一覧用）
   const { thumb, w: tw, h: th } = await makeThumbnail(blob);
 
   const shotId = await db.shots.add({
@@ -249,20 +213,26 @@ async function takeShot() {
     kind,
     createdAt: Date.now(),
     mime: blob.type,
-    blob,              // フル
+    blob,
     thumbMime: thumb.type,
-    thumbBlob: thumb,  // サムネ
+    thumbBlob: thumb,
     w, h,
     tw, th
   });
 
-  // 直前の写真IDを保存
   await db.meta.put({ key: "lastShotId", value: String(shotId) });
 
   await recomputeChecked(deviceNo);
   await setActiveDevice(deviceNo);
 }
 
+async function deleteShot(id) {
+  const shot = await db.shots.get(id);
+  if (!shot) return;
+  await db.shots.delete(id);
+  await recomputeChecked(shot.deviceNo);
+  await render();
+}
 
 async function renderDeviceList(devices) {
   el.deviceList.innerHTML = "";
@@ -317,7 +287,7 @@ async function renderShots(deviceNo) {
   for (const s of shots) {
     const isLast = String(s.id) === String(lastShotId);
 
-    const showBlob = isLast ? s.blob : (s.thumbBlob || s.blob); // thumb無い旧データはblob
+    const showBlob = isLast ? s.blob : (s.thumbBlob || s.blob);
     const url = URL.createObjectURL(showBlob);
 
     const div = document.createElement("div");
@@ -333,7 +303,6 @@ async function renderShots(deviceNo) {
       </div>
     `;
 
-    // プレビュー：直前はフル表示＆拡大、直前以外はthumbで開く（要件通り）
     div.querySelector(`[data-open="${s.id}"]`).addEventListener("click", async (ev) => {
       ev.stopPropagation();
       const shot = await db.shots.get(s.id);
@@ -348,7 +317,6 @@ async function renderShots(deviceNo) {
       URL.revokeObjectURL(url);
       await deleteShot(s.id);
 
-      // 直前を消したなら、直前IDを更新（残ってる最新にする）
       if (isLast) {
         const left = await db.shots.where("deviceNo").equals(deviceNo).toArray();
         left.sort((a,b)=>b.createdAt-a.createdAt);
@@ -358,37 +326,6 @@ async function renderShots(deviceNo) {
     });
 
     el.shots.appendChild(div);
-
-    // 解放
-    setTimeout(() => URL.revokeObjectURL(url), 30_000);
-  }
-}
-
-  const shots = await db.shots.where("deviceNo").equals(deviceNo).reverse().sortBy("createdAt");
-  shots.reverse(); // createdAt asc -> descにしたい場合は逆に
-  const doneKinds = await computeDoneKinds(deviceNo);
-  el.shotMeta.textContent = `必須: ${REQUIRED_KINDS.map(k => `${KIND_LABEL[k]}${doneKinds.has(k) ? "✅" : "□"}`).join(" / ")}`;
-
-  // 表示用URL（都度生成して破棄）
-  for (const s of shots.slice().reverse()) {
-    const url = URL.createObjectURL(s.blob);
-    const div = document.createElement("div");
-    div.className = "shot";
-    div.innerHTML = `
-      <img src="${url}" alt="">
-      <div class="cap">
-        <span>${KIND_LABEL[s.kind]} / ${new Date(s.createdAt).toLocaleString()}</span>
-        <button data-del="${s.id}" class="danger">削除</button>
-      </div>
-    `;
-    div.querySelector("button").addEventListener("click", async (ev) => {
-      ev.stopPropagation();
-      URL.revokeObjectURL(url);
-      await deleteShot(s.id);
-    });
-    el.shots.appendChild(div);
-
-    // 画面が重くなるのを抑えるため、表示後少しして解放（必要なら調整）
     setTimeout(() => URL.revokeObjectURL(url), 30_000);
   }
 }
@@ -400,7 +337,6 @@ async function exportZip() {
   const devices = await db.devices.orderBy("deviceNo").toArray();
   const shots = await db.shots.toArray();
 
-  // CSV
   const devicesCsv = [
     "deviceNo,deviceType,checked,updatedAt",
     ...devices.map(d => [
@@ -426,14 +362,12 @@ async function exportZip() {
     })))
   ].join("\n");
 
-  // fflateでzip構築
   const { zipSync, strToU8 } = window.fflate;
 
   const files = {};
   files["devices.csv"] = strToU8(devicesCsv);
   files["progress.csv"] = strToU8(progressCsv);
 
-  // 写真を詰める
   for (const s of shots) {
     const fname = `photos/${sanitizeFile(s.deviceNo)}/${s.kind}_${new Date(s.createdAt).toISOString().replace(/[:.]/g, "-")}.jpg`;
     const buf = new Uint8Array(await s.blob.arrayBuffer());
@@ -443,7 +377,6 @@ async function exportZip() {
   const zipped = zipSync(files, { level: 6 });
   const blob = new Blob([zipped], { type: "application/zip" });
 
-  // ダウンロード
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
   a.download = zipName;
@@ -468,6 +401,38 @@ async function wipeAll() {
   await render();
 }
 
+async function checkStorage() {
+  const out = document.getElementById("storageWarn");
+  if (!out) return;
+
+  if (!navigator.storage?.estimate) {
+    out.textContent = "容量:取得不可";
+    return;
+  }
+
+  try {
+    const { usage, quota } = await navigator.storage.estimate();
+    if (!usage || !quota) {
+      out.textContent = "容量:不明";
+      return;
+    }
+
+    const ratio = usage / quota;
+    const usedMB = Math.round(usage / (1024 * 1024));
+    const quotaMB = Math.round(quota / (1024 * 1024));
+
+    if (ratio >= 0.92) {
+      out.textContent = `容量:危険 ${usedMB}/${quotaMB}MB（ZIP出力して削除推奨）`;
+    } else if (ratio >= 0.85) {
+      out.textContent = `容量:警告 ${usedMB}/${quotaMB}MB`;
+    } else {
+      out.textContent = `容量:${usedMB}/${quotaMB}MB`;
+    }
+  } catch {
+    out.textContent = "容量:エラー";
+  }
+}
+
 async function render() {
   const onlyInc = await loadOnlyIncomplete();
   el.onlyIncomplete.checked = onlyInc;
@@ -476,9 +441,9 @@ async function render() {
   if (onlyInc) devices = devices.filter(d => !d.checked);
 
   const activeNo = await getActiveDeviceNo();
-  await renderActiveDeviceSelect(devices.length ? devices : await db.devices.orderBy("deviceNo").toArray(), activeNo);
+  const allDevices = devices.length ? devices : await db.devices.orderBy("deviceNo").toArray();
+  await renderActiveDeviceSelect(allDevices, activeNo);
 
-  // activeDeviceが一覧フィルタで消えた場合でも、選択は保持して表示はできるようにする
   el.activeDevice.value = activeNo || "";
 
   await renderDeviceList(devices);
@@ -489,7 +454,6 @@ async function render() {
 async function init() {
   await registerSw();
 
-  // UIイベント
   el.btnAdd.addEventListener("click", addDeviceFromUi);
   el.onlyIncomplete.addEventListener("change", toggleOnlyIncomplete);
   el.activeDevice.addEventListener("change", (e) => setActiveDevice(e.target.value));
@@ -501,19 +465,17 @@ async function init() {
   el.btnExport.addEventListener("click", exportZip);
   el.btnWipe.addEventListener("click", wipeAll);
 
-    // preview
+  // preview controls
   el.closePreview.addEventListener("click", closePreview);
   el.preview.addEventListener("click", (e) => {
-    // 背景クリックで閉じる（画像/バーは閉じない）
     if (e.target === el.preview) closePreview();
   });
   el.zoomIn.addEventListener("click", () => setZoom(zoom * 1.25));
   el.zoomOut.addEventListener("click", () => setZoom(zoom / 1.25));
   el.zoomReset.addEventListener("click", () => setZoom(1));
 
-  // タスク切替等で何かする必要は基本ない（DB保存済みだから）
-  document.addEventListener("visibilitychange", () => {
-    // もし将来「一時入力」などを追加したらここでcommitする
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closePreview();
   });
 
   await render();

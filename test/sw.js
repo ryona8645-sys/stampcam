@@ -25,12 +25,10 @@ self.addEventListener("activate", (event) => {
   })());
 });
 
-// アプリシェル優先。API系は無いのでシンプル。
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
 
-  // test配下のみ制御（他は触らない）
   if (!url.pathname.includes("/test/")) return;
 
   event.respondWith((async () => {
@@ -38,14 +36,11 @@ self.addEventListener("fetch", (event) => {
     const cached = await cache.match(req, { ignoreSearch: true });
     if (cached) return cached;
 
-    // ネット優先で取って、取れたらキャッシュ（CDNも入る）
     try {
       const res = await fetch(req);
-      // opaqueでもOK、キャッシュしておく（オフライン時の再現性UP）
       cache.put(req, res.clone()).catch(() => {});
       return res;
     } catch {
-      // 最後にルート返し
       return (await cache.match("./index.html")) || new Response("offline", { status: 503 });
     }
   })());

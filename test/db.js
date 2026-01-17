@@ -4,14 +4,12 @@ export function openDb() {
 
   db.version(2).stores({
     devices: "++id, deviceNo, updatedAt, checked",
-    // kind + createdAtで並べ替えしやすく
     shots: "++id, deviceNo, kind, createdAt",
     meta: "key"
-  }).upgrade(async (tx) => {
-    // v1 -> v2 で、既存shotsにthumbを後付けしたいならここで生成もできるが、
-    // 1000枚生成は重いので「今後の新規撮影からthumb付き」にするのが現実的。
+  }).upgrade(async () => {
+    // v1 -> v2: 既存データのサムネ一括生成は重いので実施しない。
+    // 新規撮影からthumb付きで保存する。
   });
 
   return db;
 }
-

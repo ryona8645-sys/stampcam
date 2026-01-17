@@ -12,9 +12,9 @@
   <header class="bar">
     <div class="title">StampCam PWA (test)</div>
     <div class="right">
+      <span id="storageWarn" style="opacity:.85;font-size:12px;"></span>
       <button id="btnExport">ZIP出力</button>
       <button id="btnWipe" class="danger">全削除</button>
-      <span id="storageWarn" style="opacity:.85;font-size:12px;"></span>
     </div>
   </header>
 
@@ -69,23 +69,23 @@
       </div>
       <div id="shots" class="shots"></div>
     </section>
-    
-    <div id="preview" class="modal hidden">
-      <div class="modalBar">
-        <div id="previewTitle" class="modalTitle"></div>
-        <div class="modalBtns">
-          <button id="zoomOut">-</button>
-          <button id="zoomReset">等倍</button>
-          <button id="zoomIn">+</button>
-          <button id="closePreview" class="danger">閉じる</button>
-        </div>
-      </div>
-      <div class="modalBody">
-        <img id="previewImg" alt="">
+  </main>
+
+  <!-- Preview Modal -->
+  <div id="preview" class="modal hidden">
+    <div class="modalBar">
+      <div id="previewTitle" class="modalTitle"></div>
+      <div class="modalBtns">
+        <button id="zoomOut">-</button>
+        <button id="zoomReset">等倍</button>
+        <button id="zoomIn">+</button>
+        <button id="closePreview" class="danger">閉じる</button>
       </div>
     </div>
-    
-  </main>
+    <div class="modalBody">
+      <img id="previewImg" alt="">
+    </div>
+  </div>
 
   <!-- ライブラリ（CDN）。厳密なオフラインにしたいならローカル配置に切り替える -->
   <script src="https://cdn.jsdelivr.net/npm/dexie@4/dist/dexie.min.js"></script>
