@@ -1,8 +1,8 @@
 {
-  "name": "SurveyCam",
-  "short_name": "SurveyCam",
-  "start_url": "../index.html",
-  "scope": "../",
+  "name": "SurveyCam (TEST)",
+  "short_name": "SurveyCamT",
+  "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#ffffff",
