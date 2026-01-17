@@ -26,6 +26,39 @@ async function makeThumbnail(blob, maxSide = 320, quality = 0.7) {
   return { thumb, w, h };
 }
 
+async function checkStorage() {
+  const out = document.getElementById("storageWarn");
+  if (!out) return;
+
+  if (!navigator.storage?.estimate) {
+    out.textContent = "容量:取得不可";
+    return;
+  }
+
+  try {
+    const { usage, quota } = await navigator.storage.estimate();
+    if (!usage || !quota) {
+      out.textContent = "容量:不明";
+      return;
+    }
+
+    const ratio = usage / quota;
+    const usedMB = Math.round(usage / (1024 * 1024));
+    const quotaMB = Math.round(quota / (1024 * 1024));
+
+    // 閾値：85%で警告、92%で強警告
+    if (ratio >= 0.92) {
+      out.textContent = `容量:危険 ${usedMB}/${quotaMB}MB（ZIP出力して削除推奨）`;
+    } else if (ratio >= 0.85) {
+      out.textContent = `容量:警告 ${usedMB}/${quotaMB}MB`;
+    } else {
+      out.textContent = `容量:${usedMB}/${quotaMB}MB`;
+    }
+  } catch {
+    out.textContent = "容量:エラー";
+  }
+}
+
 
 const db = openDb();
 
