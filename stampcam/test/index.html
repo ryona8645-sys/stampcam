@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StampCam PWA (test)</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" content="#111111">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="bar">
+    <div class="title">StampCam PWA (test)</div>
+    <div class="right">
+      <span id="storageWarn" style="opacity:.85;font-size:12px;"></span>
+      <button id="btnExport">ZIP出力</button>
+      <button id="btnWipe" class="danger">全削除</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="panel">
+      <h2>機器追加</h2>
+      <div class="row">
+        <input id="deviceNo" placeholder="機器No (例: 001)" />
+        <input id="deviceType" placeholder="機器種別 (任意)" />
+        <button id="btnAdd">追加</button>
+      </div>
+      <div class="hint">※チェック/写真は自動保存（IndexedDB）</div>
+    </section>
+
+    <section class="panel">
+      <div class="row space">
+        <h2>機器一覧</h2>
+        <label class="row">
+          <input type="checkbox" id="onlyIncomplete">
+          <span>未完了のみ</span>
+        </label>
+      </div>
+      <div id="deviceList" class="list"></div>
+    </section>
+
+    <section class="panel">
+      <h2>撮影</h2>
+
+      <div class="row">
+        <select id="kind">
+          <option value="overview">全景</option>
+          <option value="lamp">ランプ</option>
+          <option value="port">ポート</option>
+          <option value="label">ラベル</option>
+        </select>
+
+        <select id="activeDevice"></select>
+
+        <button id="btnStart">カメラ開始</button>
+        <button id="btnShot">撮影</button>
+        <button id="btnStop">停止</button>
+      </div>
+
+      <div class="cam">
+        <video id="video" playsinline></video>
+        <canvas id="canvas" hidden></canvas>
+      </div>
+
+      <div class="row space">
+        <h3>撮影済み</h3>
+        <div id="shotMeta" class="meta"></div>
+      </div>
+      <div id="shots" class="shots"></div>
+    </section>
+  </main>
+
+  <!-- Preview Modal -->
+  <div id="preview" class="modal hidden">
+    <div class="modalBar">
+      <div id="previewTitle" class="modalTitle"></div>
+      <div class="modalBtns">
+        <button id="zoomOut">-</button>
+        <button id="zoomReset">等倍</button>
+        <button id="zoomIn">+</button>
+        <button id="closePreview" class="danger">閉じる</button>
+      </div>
+    </div>
+    <div class="modalBody">
+      <img id="previewImg" alt="">
+    </div>
+  </div>
+
+  <!-- ライブラリ（CDN）。厳密なオフラインにしたいならローカル配置に切り替える -->
+  <script src="https://cdn.jsdelivr.net/npm/dexie@4/dist/dexie.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
