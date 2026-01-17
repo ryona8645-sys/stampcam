@@ -1,51 +1,52 @@
-const CACHE_NAME = "phototool-test-v1";
+// sw.js
+const CACHE = "stampcam-test-shell-v1";
 const ASSETS = [
-  "/test/",
-  "/test/index.html",
-  "/test/styles.css",
-  "/test/app.js",
-  "/test/db.js",
-  "/test/zip.js",
-  "/test/manifest.webmanifest"
+  "./",
+  "./index.html",
+  "./styles.css",
+  "./app.js",
+  "./db.js",
+  "./manifest.webmanifest",
 ];
 
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
-    const cache = await caches.open(CACHE_NAME);
+    const cache = await caches.open(CACHE);
     await cache.addAll(ASSETS);
-    // skipWaiting() しない = 作業中に急に切り替わりにくい
+    self.skipWaiting();
   })());
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.map(k => (k === CACHE_NAME ? null : caches.delete(k))));
-    await self.clients.claim();
+    await Promise.all(keys.map(k => (k === CACHE ? null : caches.delete(k))));
+    self.clients.claim();
   })());
 });
 
+// アプリシェル優先。API系は無いのでシンプル。
 self.addEventListener("fetch", (event) => {
   const req = event.request;
-  // GETだけキャッシュ
-  if (req.method !== "GET") return;
+  const url = new URL(req.url);
+
+  // test配下のみ制御（他は触らない）
+  if (!url.pathname.includes("/test/")) return;
 
   event.respondWith((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    const cached = await cache.match(req);
+    const cache = await caches.open(CACHE);
+    const cached = await cache.match(req, { ignoreSearch: true });
     if (cached) return cached;
 
+    // ネット優先で取って、取れたらキャッシュ（CDNも入る）
     try {
       const res = await fetch(req);
-      // 成功だけキャッシュ
-      if (res.ok && new URL(req.url).origin === location.origin) {
-        cache.put(req, res.clone());
-      }
+      // opaqueでもOK、キャッシュしておく（オフライン時の再現性UP）
+      cache.put(req, res.clone()).catch(() => {});
       return res;
-    } catch (e) {
-      // オフラインで未キャッシュなら落とす
-      return cached || new Response("Offline", { status: 503 });
+    } catch {
+      // 最後にルート返し
+      return (await cache.match("./index.html")) || new Response("offline", { status: 503 });
     }
   })());
 });
-
