@@ -1,4 +1,4 @@
-import { zipSync, strToU8 } from "https://cdn.jsdelivr.net/npm/fflate@0.8.2/esm/index.mjs";
+import { zipSync, strToU8 } from "./vendor/fflate.esm.js";
 
 export async function exportProjectZipTest() {
   const files = {
