@@ -483,6 +483,7 @@ async function render() {
 
   await renderDeviceList(devices);
   await renderShots(activeNo);
+  await checkStorage();
 }
 
 async function init() {
