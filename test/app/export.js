@@ -5,6 +5,7 @@ export async function exportProjectZipTest() {
     "hello.txt": strToU8("hello"),
     "devices.csv": strToU8("deviceNo,type\n001,router\n")
   };
+
   const zipped = zipSync(files, { level: 6 });
   const blob = new Blob([zipped], { type: "application/zip" });
 
@@ -12,6 +13,6 @@ export async function exportProjectZipTest() {
   a.href = URL.createObjectURL(blob);
   a.download = "test.zip";
   a.click();
+
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
-
