@@ -8,6 +8,25 @@ const KIND_LABEL = {
   label: "ラベル"
 };
 
+async function makeThumbnail(blob, maxSide = 320, quality = 0.7) {
+  const bmp = await createImageBitmap(blob);
+  const scale = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
+  const w = Math.max(1, Math.round(bmp.width * scale));
+  const h = Math.max(1, Math.round(bmp.height * scale));
+
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  const ctx = c.getContext("2d", { alpha: false });
+  ctx.drawImage(bmp, 0, 0, w, h);
+
+  const thumb = await new Promise((resolve) => c.toBlob(resolve, "image/jpeg", quality));
+  bmp.close?.();
+  if (!thumb) throw new Error("thumb gen failed");
+  return { thumb, w, h };
+}
+
+
 const db = openDb();
 
 const el = {
@@ -30,9 +49,46 @@ const el = {
 
   btnExport: document.getElementById("btnExport"),
   btnWipe: document.getElementById("btnWipe")
+
+  preview: document.getElementById("preview"),
+  previewImg: document.getElementById("previewImg"),
+  previewTitle: document.getElementById("previewTitle"),
+  closePreview: document.getElementById("closePreview"),
+  zoomIn: document.getElementById("zoomIn"),
+  zoomOut: document.getElementById("zoomOut"),
+  zoomReset: document.getElementById("zoomReset"),
 };
 
 let stream = null;
+
+let previewUrl = null;
+let zoom = 1;
+
+function openPreview(title, blob) {
+  if (previewUrl) URL.revokeObjectURL(previewUrl);
+  previewUrl = URL.createObjectURL(blob);
+
+  zoom = 1;
+  el.previewImg.style.transform = `scale(${zoom})`;
+  el.previewImg.src = previewUrl;
+  el.previewTitle.textContent = title;
+
+  el.preview.classList.remove("hidden");
+}
+
+function closePreview() {
+  el.preview.classList.add("hidden");
+  if (previewUrl) {
+    URL.revokeObjectURL(previewUrl);
+    previewUrl = null;
+  }
+}
+
+function setZoom(next) {
+  zoom = Math.max(0.25, Math.min(6, next));
+  el.previewImg.style.transform = `scale(${zoom})`;
+}
+
 
 async function registerSw() {
   if (!("serviceWorker" in navigator)) return;
@@ -152,26 +208,28 @@ async function takeShot() {
   const blob = await new Promise((resolve) => c.toBlob(resolve, "image/jpeg", 0.85));
   if (!blob) return alert("撮影失敗");
 
-  await db.shots.add({
+  // サムネ生成（一覧用）
+  const { thumb, w: tw, h: th } = await makeThumbnail(blob);
+
+  const shotId = await db.shots.add({
     deviceNo,
     kind,
     createdAt: Date.now(),
     mime: blob.type,
-    blob,
-    w, h
+    blob,              // フル
+    thumbMime: thumb.type,
+    thumbBlob: thumb,  // サムネ
+    w, h,
+    tw, th
   });
+
+  // 直前の写真IDを保存
+  await db.meta.put({ key: "lastShotId", value: String(shotId) });
 
   await recomputeChecked(deviceNo);
   await setActiveDevice(deviceNo);
 }
 
-async function deleteShot(id) {
-  const shot = await db.shots.get(id);
-  if (!shot) return;
-  await db.shots.delete(id);
-  await recomputeChecked(shot.deviceNo);
-  await render();
-}
 
 async function renderDeviceList(devices) {
   el.deviceList.innerHTML = "";
@@ -213,6 +271,65 @@ async function renderShots(deviceNo) {
     el.shotMeta.textContent = "";
     return;
   }
+
+  const lastShotId = (await db.meta.get("lastShotId"))?.value || "";
+  const shots = await db.shots.where("deviceNo").equals(deviceNo).toArray();
+  shots.sort((a,b) => b.createdAt - a.createdAt);
+
+  const doneKinds = await computeDoneKinds(deviceNo);
+  el.shotMeta.textContent =
+    `必須: ${REQUIRED_KINDS.map(k => `${KIND_LABEL[k]}${doneKinds.has(k) ? "✅" : "□"}`).join(" / ")}`
+    + ` / 枚数: ${shots.length}`;
+
+  for (const s of shots) {
+    const isLast = String(s.id) === String(lastShotId);
+
+    const showBlob = isLast ? s.blob : (s.thumbBlob || s.blob); // thumb無い旧データはblob
+    const url = URL.createObjectURL(showBlob);
+
+    const div = document.createElement("div");
+    div.className = "shot";
+    div.innerHTML = `
+      <img src="${url}" alt="">
+      <div class="cap">
+        <span>${KIND_LABEL[s.kind]}${isLast ? "（直前）" : ""}</span>
+        <div style="display:flex; gap:6px;">
+          <button data-open="${s.id}">プレビュー</button>
+          <button data-del="${s.id}" class="danger">削除</button>
+        </div>
+      </div>
+    `;
+
+    // プレビュー：直前はフル表示＆拡大、直前以外はthumbで開く（要件通り）
+    div.querySelector(`[data-open="${s.id}"]`).addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      const shot = await db.shots.get(s.id);
+      if (!shot) return;
+      const last = String(shot.id) === String(lastShotId);
+      const b = last ? shot.blob : (shot.thumbBlob || shot.blob);
+      openPreview(`${shot.deviceNo} / ${KIND_LABEL[shot.kind]} / ${new Date(shot.createdAt).toLocaleString()}`, b);
+    });
+
+    div.querySelector(`[data-del="${s.id}"]`).addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      URL.revokeObjectURL(url);
+      await deleteShot(s.id);
+
+      // 直前を消したなら、直前IDを更新（残ってる最新にする）
+      if (isLast) {
+        const left = await db.shots.where("deviceNo").equals(deviceNo).toArray();
+        left.sort((a,b)=>b.createdAt-a.createdAt);
+        await db.meta.put({ key: "lastShotId", value: left[0] ? String(left[0].id) : "" });
+      }
+      await render();
+    });
+
+    el.shots.appendChild(div);
+
+    // 解放
+    setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  }
+}
 
   const shots = await db.shots.where("deviceNo").equals(deviceNo).reverse().sortBy("createdAt");
   shots.reverse(); // createdAt asc -> descにしたい場合は逆に
@@ -349,6 +466,16 @@ async function init() {
 
   el.btnExport.addEventListener("click", exportZip);
   el.btnWipe.addEventListener("click", wipeAll);
+
+    // preview
+  el.closePreview.addEventListener("click", closePreview);
+  el.preview.addEventListener("click", (e) => {
+    // 背景クリックで閉じる（画像/バーは閉じない）
+    if (e.target === el.preview) closePreview();
+  });
+  el.zoomIn.addEventListener("click", () => setZoom(zoom * 1.25));
+  el.zoomOut.addEventListener("click", () => setZoom(zoom / 1.25));
+  el.zoomReset.addEventListener("click", () => setZoom(1));
 
   // タスク切替等で何かする必要は基本ない（DB保存済みだから）
   document.addEventListener("visibilitychange", () => {
