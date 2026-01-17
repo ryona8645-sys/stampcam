@@ -1,1 +1,11 @@
+{
+  "name": "Photo Tool (test)",
+  "short_name": "PhotoTool",
+  "start_url": "/test/",
+  "scope": "/test/",
+  "display": "standalone",
+  "background_color": "#111111",
+  "theme_color": "#111111",
+  "icons": []
+}
 
