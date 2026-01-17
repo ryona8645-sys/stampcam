@@ -2,46 +2,40 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Photo Tool (PWA test)</title>
-
-  <link rel="manifest" href="/test/manifest.webmanifest" />
-  <meta name="theme-color" content="#111111" />
-  <link rel="stylesheet" href="/test/styles.css" />
-
-  <!-- iOSは今回対象外としてもOK。Android/Chrome固定ならこれで十分 -->
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StampCam PWA (test)</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" content="#111111">
+  <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <header class="header">
-    <div class="row">
-      <h1>Photo Tool (test)</h1>
-      <div class="row gap">
-        <button id="btnInstall" class="btn" hidden>インストール</button>
-        <button id="btnExport" class="btn">ZIP出力</button>
-        <button id="btnWipe" class="btn danger">全消去</button>
-      </div>
-    </div>
-    <div class="row">
-      <label>プロジェクト名 <input id="projectName" placeholder="例: 〇〇ビル 3F" /></label>
-      <button id="btnNewProject" class="btn">新規/切替</button>
-      <span id="status" class="status"></span>
+  <header class="bar">
+    <div class="title">StampCam PWA (test)</div>
+    <div class="right">
+      <button id="btnExport">ZIP出力</button>
+      <button id="btnWipe" class="danger">全削除</button>
     </div>
   </header>
 
-  <main class="main">
+  <main class="wrap">
     <section class="panel">
-      <h2>機器</h2>
+      <h2>機器追加</h2>
       <div class="row">
-        <label>機器No <input id="deviceNo" placeholder="例: SW-01" /></label>
-        <button id="btnOpenDevice" class="btn">開く</button>
+        <input id="deviceNo" placeholder="機器No (例: 001)" />
+        <input id="deviceType" placeholder="機器種別 (任意)" />
+        <button id="btnAdd">追加</button>
       </div>
+      <div class="hint">※チェック/写真は自動保存（IndexedDB）</div>
+    </section>
 
-      <div class="row">
-        <label>検索 <input id="search" placeholder="機器Noで検索" /></label>
-        <label><input type="checkbox" id="onlyPending" /> 未完了のみ</label>
-        <button id="btnRefresh" class="btn">更新</button>
+    <section class="panel">
+      <div class="row space">
+        <h2>機器一覧</h2>
+        <label class="row">
+          <input type="checkbox" id="onlyIncomplete">
+          <span>未完了のみ</span>
+        </label>
       </div>
-
       <div id="deviceList" class="list"></div>
     </section>
 
@@ -49,34 +43,37 @@
       <h2>撮影</h2>
 
       <div class="row">
-        <div class="kinds">
-          <button class="btn kind" data-kind="overview">全景</button>
-          <button class="btn kind" data-kind="lamp">ランプ</button>
-          <button class="btn kind" data-kind="port">ポート</button>
-          <button class="btn kind" data-kind="label">ラベル</button>
-        </div>
+        <select id="kind">
+          <option value="overview">全景</option>
+          <option value="lamp">ランプ</option>
+          <option value="port">ポート</option>
+          <option value="label">ラベル</option>
+        </select>
+
+        <select id="activeDevice"></select>
+
+        <button id="btnStart">カメラ開始</button>
+        <button id="btnShot">撮影</button>
+        <button id="btnStop">停止</button>
       </div>
 
-      <div class="row">
-        <label>現在の機器: <b id="currentDevice">-</b></label>
-        <label>必須4種: <span id="reqState">-</span></label>
-        <button id="btnMarkDone" class="btn">機器完了</button>
+      <div class="cam">
+        <video id="video" playsinline></video>
+        <canvas id="canvas" hidden></canvas>
       </div>
 
-      <div class="row">
-        <video id="video" playsinline autoplay muted></video>
+      <div class="row space">
+        <h3>撮影済み</h3>
+        <div id="shotMeta" class="meta"></div>
       </div>
-
-      <div class="row gap">
-        <button id="btnShot" class="btn primary">撮影</button>
-        <button id="btnTorch" class="btn">ライト</button>
-        <button id="btnSwitchCam" class="btn">カメラ切替</button>
-      </div>
-
       <div id="shots" class="shots"></div>
     </section>
   </main>
 
-  <script type="module" src="/test/app.js"></script>
+  <!-- ライブラリ（CDN）。厳密なオフラインにしたいならローカル配置に切り替える -->
+  <script src="https://cdn.jsdelivr.net/npm/dexie@4/dist/dexie.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
+
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
