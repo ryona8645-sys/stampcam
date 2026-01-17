@@ -68,6 +68,22 @@
       </div>
       <div id="shots" class="shots"></div>
     </section>
+    
+    <div id="preview" class="modal hidden">
+      <div class="modalBar">
+        <div id="previewTitle" class="modalTitle"></div>
+        <div class="modalBtns">
+          <button id="zoomOut">-</button>
+          <button id="zoomReset">等倍</button>
+          <button id="zoomIn">+</button>
+          <button id="closePreview" class="danger">閉じる</button>
+        </div>
+      </div>
+      <div class="modalBody">
+        <img id="previewImg" alt="">
+      </div>
+    </div>
+    
   </main>
 
   <!-- ライブラリ（CDN）。厳密なオフラインにしたいならローカル配置に切り替える -->
