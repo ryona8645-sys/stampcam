@@ -10,7 +10,7 @@ function formatDeviceIndex(n){ return String(n).padStart(3,"0"); }
 function makeRoomDeviceLabel(roomName, deviceIndex){
   const room = normalizeRoomName(roomName);
   const idx = formatDeviceIndex(deviceIndex);
-  return `${room}_機器${idx}`;
+  return (Number(deviceIndex) === 0) ? `${room}_free` : `${room}_機器${idx}`;
 }
 function qparam(name){
   const url = new URL(location.href);
@@ -294,7 +294,7 @@ async function takeShot(){
 
 async function init(){
   deviceKey = qparam("deviceKey");
-  freeMode = qparam("free") === "1" || String(deviceKey).endsWith("::000");
+  freeMode = qparam("free") === "1" || String(deviceKey).startsWith("free::000");
   if (!deviceKey){
     alert("deviceKeyがありません。");
     location.href = "./index.html";
@@ -306,10 +306,11 @@ async function init(){
       roomName = "フリー";
       deviceIndex = 0;
     } else {
-      const [r, idx] = String(deviceKey).split("::");
-      roomName = normalizeRoomName(r);
-      deviceIndex = Number(idx);
-    }
+    const [r, idx] = String(deviceKey).split("::");
+    roomName = normalizeRoomName(r);
+    deviceIndex = Number(idx);
+    if (deviceIndex === 0) freeMode = true;
+  }
   }
 
   await upsertDeviceByKey(deviceKey);

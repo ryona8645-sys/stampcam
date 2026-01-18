@@ -47,8 +47,7 @@ function makeDeviceKey(roomName, deviceIndex) {
 function makeRoomDeviceLabel(roomName, deviceIndex) {
   const room = normalizeRoomName(roomName);
   const idx = formatDeviceIndex(deviceIndex);
-  if (Number(deviceIndex) === 0) return `${room}_FREE`;
-  return `${room}_機器${idx}`;
+  return (Number(deviceIndex) === 0) ? `${room}_free` : `${room}_機器${idx}`;
 }
 function sanitizeFile(s) {
   return String(s).replace(/[\\/:*?"<>|\s]/g, "_");
@@ -68,14 +67,6 @@ async function getActiveRoom() { return await getMeta("activeRoom",""); }
 async function getActiveDeviceKey() { return await getMeta("activeDeviceKey",""); }
 async function loadOnlyIncomplete() { return (await getMeta("onlyIncomplete","0")) === "1"; }
 
-async function ensureFreeRoom() {
-  const rooms = await getRooms();
-  if (!rooms.includes("free")) {
-    rooms.push("free");
-    await setRooms(rooms);
-  }
-}
-
 async function getRooms() {
   const raw = await getMeta("rooms","[]");
   try {
@@ -86,8 +77,6 @@ async function getRooms() {
 }
 async function setRooms(arr) {
   const uniq = Array.from(new Set(arr.map(normalizeRoomName)));
-  // always keep "free"
-  if (!uniq.includes("free")) uniq.push("free");
   await setMeta("rooms", JSON.stringify(uniq));
 }
 
@@ -163,23 +152,18 @@ async function renderRooms() {
   el.roomList.innerHTML = "";
 
   for (const room of rooms) {
-    const isFree = room === "free";
-
     const card = document.createElement("div");
     card.className = "roomCard";
-    if (room === activeRoom) {
-      card.classList.add("active");
-    }
+    if (room === activeRoom) card.classList.add("active");
 
     const head = document.createElement("div");
     head.className = "roomHead";
 
-    // title row + badge
     const titleRow = document.createElement("div");
     titleRow.className = "roomTitleRow";
     titleRow.innerHTML = `
       <div class="roomTitle">${room}</div>
-      <span class="badge">${room === activeRoom ? "選択中（機器No入力先）" : "タップして選択"}</span>
+      <span class="badge">${room === activeRoom ? "選択中（機器No入力先）" : "選択すると機器No入力先が切替"}</span>
     `;
 
     const btnRow = document.createElement("div");
@@ -192,42 +176,39 @@ async function renderRooms() {
     btnSelect.textContent = "選択";
     btnSelect.addEventListener("click", async () => {
       await setMeta("activeRoom", room);
-      // 部屋選択 → 機器No選択が次に効く
       const det = document.getElementById("deviceNoPicker");
       if (det) det.open = true;
       await render();
     });
 
-    btnRow.appendChild(btnSelect);
-
-    if (!isFree) {
-      const btnDel = document.createElement("button");
-      btnDel.className = "danger";
-      btnDel.textContent = "削除";
-      btnDel.addEventListener("click", async () => {
-        const ok = confirm(`部屋「${room}」を削除します。
+    const btnDel = document.createElement("button");
+    btnDel.className = "danger";
+    btnDel.textContent = "削除";
+    btnDel.addEventListener("click", async () => {
+      const ok = confirm(`部屋「${room}」を削除します。
 この部屋の機器と写真も削除します。`);
-        if (!ok) return;
+      if (!ok) return;
 
-        const keys = (await db.devices.where("roomName").equals(room).toArray()).map(d => d.deviceKey);
-        for (const k of keys) {
-          await db.devices.delete(k);
-          const shots = await db.shots.where("deviceKey").equals(k).toArray();
-          for (const s of shots) await db.shots.delete(s.id);
-        }
+      const keys = (await db.devices.where("roomName").equals(room).toArray()).map(d => d.deviceKey);
+      for (const k of keys) {
+        await db.devices.delete(k);
+        const shots = await db.shots.where("deviceKey").equals(k).toArray();
+        for (const s of shots) await db.shots.delete(s.id);
+      }
 
-        const nextRooms = (await getRooms()).filter(r => r !== room);
-        await setRooms(nextRooms);
+      const nextRooms = (await getRooms()).filter(r => r !== room);
+      await setRooms(nextRooms);
 
-        const ar = await getActiveRoom();
-        if (ar === room) await setMeta("activeRoom", nextRooms[0] || "free");
-        const ak = await getActiveDeviceKey();
-        if (ak.startsWith(room + "::")) await setMeta("activeDeviceKey", "");
+      const ar = await getActiveRoom();
+      if (ar === room) await setMeta("activeRoom", nextRooms[0] || "");
+      const ak = await getActiveDeviceKey();
+      if (ak.startsWith(room + "::")) await setMeta("activeDeviceKey", "");
 
-        await render();
-      });
-      btnRow.appendChild(btnDel);
-    }
+      await render();
+    });
+
+    btnRow.appendChild(btnSelect);
+    btnRow.appendChild(btnDel);
 
     head.appendChild(titleRow);
     head.appendChild(btnRow);
@@ -235,26 +216,23 @@ async function renderRooms() {
     const btnBox = document.createElement("div");
     btnBox.className = "roomBtns";
 
+    // FREE button per room (room::000)
+    const freeBtn = document.createElement("button");
+    freeBtn.textContent = "FREE";
+    const freeKey = makeDeviceKey(room, 0);
+    if (freeKey === activeKey) freeBtn.classList.add("sel");
+    freeBtn.addEventListener("click", async () => {
+      await setMeta("activeDeviceKey", freeKey);
+      document.getElementById("photoGrid")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      await render();
+    });
+    btnBox.appendChild(freeBtn);
 
-    // FREE撮影（機器Noなし）ボタン：部屋ごとに用意
-    {
-      const bFree = document.createElement("button");
-      bFree.textContent = "FREE";
-      const keyFree = makeDeviceKey(room, 0);
-      if (keyFree === activeKey) bFree.classList.add("sel");
-      bFree.addEventListener("click", async () => {
-        await setMeta("activeDeviceKey", keyFree);
-        location.href = `./camera.html?deviceKey=${encodeURIComponent(keyFree)}&free=1`;
-      });
-      btnBox.appendChild(bFree);
-    }
     const items = (groups.get(room) || []).slice().sort((a, b) => Number(a.deviceIndex) - Number(b.deviceIndex));
 
     for (const d of items) {
       if (onlyInc && d.checked) continue;
-
-      // 000はFREE扱いなので通常枠では非表示（free枠で扱う）
-      if (room === "free" && Number(d.deviceIndex) === 0) continue;
+      if (Number(d.deviceIndex) === 0) continue;
 
       const b = document.createElement("button");
       b.textContent = formatDeviceIndex(d.deviceIndex);
@@ -264,9 +242,7 @@ async function renderRooms() {
       if (d.checked) b.classList.add("ok");
 
       b.addEventListener("click", async () => {
-        // 機器選択 → 写真一覧が切り替わる
         await setMeta("activeDeviceKey", key);
-        // 写真一覧の位置を少し見せる（迷子防止）
         document.getElementById("photoGrid")?.scrollIntoView({ behavior: "smooth", block: "start" });
         await render();
       });
@@ -282,7 +258,6 @@ async function renderRooms() {
     el.activeRoomLabel.textContent = activeRoom ? `部屋:${activeRoom}` : "部屋未選択";
   }
 
-  // device pad enabled/disabled depends on activeRoom
   const pad = document.getElementById("devicePad");
   if (pad) {
     if (!activeRoom) pad.classList.add("disabled");
@@ -447,7 +422,6 @@ async function wipeAll() {
   await db.shots.clear();
   await db.meta.clear();
   await ensureDefaults();
-  await ensureFreeRoom();
   await render();
 }
 
@@ -491,7 +465,6 @@ async function render() {
 
 async function init() {
   await ensureDefaults();
-  await ensureFreeRoom();
 
   el.projectName?.addEventListener("input", async () => {
     await setMeta("projectName", String(el.projectName.value || "").trim());
@@ -509,7 +482,6 @@ async function init() {
       await setRooms(rooms);
     }
     await setMeta("activeRoom", roomDraft);
-    await ensureFreeRoom();
     await render();
   });
 
@@ -521,7 +493,7 @@ async function init() {
   el.btnOpenCamera?.addEventListener("click", async () => {
     const key = await getActiveDeviceKey();
     if (!key) return alert("先に機器を選択してください。");
-    const free = String(key).startsWith("FREE::") ? "&free=1" : "";
+    const free = String(key).endsWith("::000") ? "&free=1" : "";
     location.href = `./camera.html?deviceKey=${encodeURIComponent(key)}${free}`;
   });
 
