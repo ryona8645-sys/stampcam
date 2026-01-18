@@ -24,30 +24,36 @@
     <div class="row">
       <input id="projectName" placeholder="案件名" />
       <input id="floorName" placeholder="部屋名（例：1F事務所 / 2F機械室）" />
+      <button id="btnAddRoom" class="primary">追加</button>
     </div>
-    <div class="hint">※部屋名は「部屋枠」とファイル名に使います（自動保存）</div>
+    <div class="hint">※案件名・部屋名を入力 →「追加」で部屋を登録 → 機器Noを選択 → 機器を選択して撮影</div>
   </section>
 
   <section class="panel">
-    <details id="devicePicker" open>
-      <summary class="summaryRow">
-        <span>機器選択</span>
-        <span id="activeDeviceLabel" class="pill"></span>
-      </summary>
-
-      <div class="hint" style="margin-top:8px;">
-        ※部屋名を入れてから、番号を押す（部屋が違えば同じ番号でも別機器）
-      </div>
-
-      <div id="roomList" class="roomList"></div>
-    </details>
+    <h2>機器選択</h2>
+    <div id="roomList" class="roomList"></div>
 
     <div class="row" style="margin-top:10px;">
-      <label class="row">
+      <label class="chkRow">
         <input type="checkbox" id="onlyIncomplete">
         <span>未完了のみ</span>
       </label>
     </div>
+  </section>
+
+  <section class="panel">
+    <details id="deviceNoPicker" open>
+      <summary class="summaryRow">
+        <span>機器No選択（001〜199）</span>
+        <span id="activeRoomLabel" class="pill"></span>
+      </summary>
+
+      <div class="hint" style="margin-top:8px;">
+        ※先に部屋を追加し、部屋枠をタップして対象部屋を選択してから番号を押してください
+      </div>
+
+      <div id="devicePad" class="devicePad"></div>
+    </details>
   </section>
 
   <section class="panel">
@@ -74,8 +80,8 @@
     <img id="previewImg" alt="">
   </div>
 </div>
-<!-- ライブラリ（CDN）。厳密なオフラインにしたいならローカル配置に切り替える -->
-  <script src="https://cdn.jsdelivr.net/npm/dexie@4/dist/dexie.min.js"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/dexie@4/dist/dexie.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
 
   <script type="module" src="./app.js"></script>

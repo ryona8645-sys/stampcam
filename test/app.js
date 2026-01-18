@@ -4,11 +4,14 @@ const db = openDb();
 const el = {
   projectName: document.getElementById("projectName"),
   floorName: document.getElementById("floorName"),
+  btnAddRoom: document.getElementById("btnAddRoom"),
 
-  devicePicker: document.getElementById("devicePicker"),
   roomList: document.getElementById("roomList"),
-  activeDeviceLabel: document.getElementById("activeDeviceLabel"),
   onlyIncomplete: document.getElementById("onlyIncomplete"),
+
+  deviceNoPicker: document.getElementById("deviceNoPicker"),
+  devicePad: document.getElementById("devicePad"),
+  activeRoomLabel: document.getElementById("activeRoomLabel"),
 
   btnExport: document.getElementById("btnExport"),
   btnWipe: document.getElementById("btnWipe"),
@@ -30,10 +33,10 @@ const REQUIRED_KINDS = ["overview","lamp","port","label"];
 const KIND_LABEL = { overview:"全景", lamp:"ランプ", port:"ポート", label:"ラベル", ipaddress:"IPアドレス" };
 
 function normalizeRoomName(s) {
-  return String(s || "").trim() || "（未設定）";
+  return String(s || "").trim() || "-";
 }
 function formatDeviceIndex(n) {
-  return String(n).padStart(2, "0");
+  return String(n).padStart(3, "0"); // 001-199
 }
 function makeDeviceKey(roomName, deviceIndex) {
   const room = normalizeRoomName(roomName);
@@ -56,10 +59,32 @@ async function getMeta(key, fallback="") {
 async function setMeta(key, value) {
   await db.meta.put({ key, value: String(value ?? "") });
 }
-async function getProjectName() { return await getMeta("projectName",""); }
-async function getRoomInput() { return normalizeRoomName(el.floorName?.value); }
+
+async function getProjectName() { return await getMeta("projectName","-"); }
+async function getRoomDraft() { return await getMeta("floorName","-"); }
+async function getActiveRoom() { return await getMeta("activeRoom",""); }
 async function getActiveDeviceKey() { return await getMeta("activeDeviceKey",""); }
 async function loadOnlyIncomplete() { return (await getMeta("onlyIncomplete","0")) === "1"; }
+
+async function getRooms() {
+  const raw = await getMeta("rooms","[]");
+  try {
+    const arr = JSON.parse(raw);
+    if (Array.isArray(arr)) return arr.map(normalizeRoomName);
+  } catch {}
+  return [];
+}
+async function setRooms(arr) {
+  const uniq = Array.from(new Set(arr.map(normalizeRoomName)));
+  await setMeta("rooms", JSON.stringify(uniq));
+}
+
+async function ensureDefaults() {
+  const pj = await getMeta("projectName","");
+  if (!pj) await setMeta("projectName","-");
+  const fl = await getMeta("floorName","");
+  if (!fl) await setMeta("floorName","-");
+}
 
 async function upsertDevice(roomName, deviceIndex) {
   const room = normalizeRoomName(roomName);
@@ -107,43 +132,70 @@ async function openPreview(title, blob) {
 }
 
 async function renderRooms() {
+  const rooms = await getRooms();
   const onlyInc = await loadOnlyIncomplete();
   if (el.onlyIncomplete) el.onlyIncomplete.checked = onlyInc;
 
-  const devicesAll = await db.devices.toArray();
-
-  const groups = new Map();
-  for (const d of devicesAll) {
-    const room = normalizeRoomName(d.roomName);
-    if (!groups.has(room)) groups.set(room, []);
-    groups.get(room).push(d);
-  }
-
-  const currentRoom = await getRoomInput();
-  if (currentRoom && !groups.has(currentRoom)) groups.set(currentRoom, []);
-
-  const rooms = Array.from(groups.keys()).sort((a,b)=>a.localeCompare(b,"ja"));
+  const activeRoom = await getActiveRoom();
   const activeKey = await getActiveDeviceKey();
+
+  const devicesAll = await db.devices.toArray();
+  const groups = new Map();
+  for (const r of rooms) groups.set(r, []);
+  for (const d of devicesAll) {
+    const r = normalizeRoomName(d.roomName);
+    if (!groups.has(r)) continue;
+    groups.get(r).push(d);
+  }
 
   el.roomList.innerHTML = "";
 
   for (const room of rooms) {
     const card = document.createElement("div");
     card.className = "roomCard";
+    if (room === activeRoom) card.style.outline = "2px solid #e6e6e6";
 
     const head = document.createElement("div");
     head.className = "roomHead";
     head.innerHTML = `
       <div class="roomTitle">${room}</div>
-      <button data-add class="primary">＋追加</button>
+      <div style="display:flex; gap:8px;">
+        <button data-select class="primary">選択</button>
+        <button data-del class="danger">削除</button>
+      </div>
     `;
+
+    head.querySelector("[data-select]").addEventListener("click", async () => {
+      await setMeta("activeRoom", room);
+      await render();
+    });
+
+    head.querySelector("[data-del]").addEventListener("click", async () => {
+      const ok = confirm(`部屋「${room}」を削除します。\nこの部屋の機器と写真も削除します。`);
+      if (!ok) return;
+
+      const keys = (await db.devices.where("roomName").equals(room).toArray()).map(d=>d.deviceKey);
+      for (const k of keys) {
+        await db.devices.delete(k);
+        const shots = await db.shots.where("deviceKey").equals(k).toArray();
+        for (const s of shots) await db.shots.delete(s.id);
+      }
+
+      const nextRooms = (await getRooms()).filter(r=>r !== room);
+      await setRooms(nextRooms);
+
+      const ar = await getActiveRoom();
+      if (ar === room) await setMeta("activeRoom", nextRooms[0] || "");
+      const ak = await getActiveDeviceKey();
+      if (ak.startsWith(room + "::")) await setMeta("activeDeviceKey", "");
+
+      await render();
+    });
 
     const btnBox = document.createElement("div");
     btnBox.className = "roomBtns";
 
-    const items = groups.get(room)
-      .slice()
-      .sort((a,b)=>Number(a.deviceIndex)-Number(b.deviceIndex));
+    const items = (groups.get(room) || []).slice().sort((a,b)=>Number(a.deviceIndex)-Number(b.deviceIndex));
 
     for (const d of items) {
       if (onlyInc && d.checked) continue;
@@ -158,35 +210,38 @@ async function renderRooms() {
       b.addEventListener("click", async () => {
         await setMeta("activeDeviceKey", key);
         await render();
-        if (el.devicePicker) el.devicePicker.open = false;
       });
       btnBox.appendChild(b);
     }
-
-    head.querySelector("[data-add]").addEventListener("click", async () => {
-      const used = new Set(items.map(x=>Number(x.deviceIndex)));
-      let n = 1;
-      while (used.has(n) && n <= 199) n++;
-      if (n > 199) return alert("199まで埋まっています");
-
-      const key = await upsertDevice(room, n);
-      await setMeta("activeDeviceKey", key);
-      await render();
-      if (el.devicePicker) el.devicePicker.open = false;
-    });
 
     card.appendChild(head);
     card.appendChild(btnBox);
     el.roomList.appendChild(card);
   }
 
-  const ak = await getActiveDeviceKey();
-  if (el.activeDeviceLabel) {
-    if (!ak) el.activeDeviceLabel.textContent = "未選択";
-    else {
-      const [r, idx] = ak.split("::");
-      el.activeDeviceLabel.textContent = makeRoomDeviceLabel(r, Number(idx));
-    }
+  if (el.activeRoomLabel) {
+    el.activeRoomLabel.textContent = activeRoom ? `部屋:${activeRoom}` : "部屋未選択";
+  }
+}
+
+async function renderDevicePad() {
+  if (!el.devicePad) return;
+  el.devicePad.innerHTML = "";
+
+  for (let i = 1; i <= 199; i++) {
+    const b = document.createElement("button");
+    b.textContent = formatDeviceIndex(i);
+
+    b.addEventListener("click", async () => {
+      const activeRoom = await getActiveRoom();
+      if (!activeRoom) return alert("先に部屋を選択してください。");
+
+      const key = await upsertDevice(activeRoom, i);
+      await setMeta("activeDeviceKey", key);
+      await render();
+    });
+
+    el.devicePad.appendChild(b);
   }
 }
 
@@ -320,6 +375,7 @@ async function wipeAll() {
   await db.devices.clear();
   await db.shots.clear();
   await db.meta.clear();
+  await ensureDefaults();
   await render();
 }
 
@@ -343,13 +399,9 @@ async function checkStorage() {
     const usedMB = Math.round(usage / (1024 * 1024));
     const quotaMB = Math.round(quota / (1024 * 1024));
 
-    if (ratio >= 0.92) {
-      out.textContent = `容量:危険 ${usedMB}/${quotaMB}MB（ZIP出力して削除推奨）`;
-    } else if (ratio >= 0.85) {
-      out.textContent = `容量:警告 ${usedMB}/${quotaMB}MB`;
-    } else {
-      out.textContent = `容量:${usedMB}/${quotaMB}MB`;
-    }
+    if (ratio >= 0.92) out.textContent = `容量:危険 ${usedMB}/${quotaMB}MB（ZIP出力して削除推奨）`;
+    else if (ratio >= 0.85) out.textContent = `容量:警告 ${usedMB}/${quotaMB}MB`;
+    else out.textContent = `容量:${usedMB}/${quotaMB}MB`;
   } catch {
     out.textContent = "容量:エラー";
   }
@@ -357,21 +409,34 @@ async function checkStorage() {
 
 async function render() {
   if (el.projectName) el.projectName.value = await getProjectName();
-  if (el.floorName) el.floorName.value = String(await getMeta("floorName",""));
+  if (el.floorName) el.floorName.value = await getRoomDraft();
 
   await renderRooms();
+  await renderDevicePad();
   await renderPhotos();
   await checkStorage();
 }
 
 async function init() {
+  await ensureDefaults();
+
   el.projectName?.addEventListener("input", async () => {
-    await setMeta("projectName", el.projectName.value.trim());
+    await setMeta("projectName", (el.projectName.value || "-").trim() || "-");
   });
 
   el.floorName?.addEventListener("input", async () => {
-    await setMeta("floorName", el.floorName.value.trim());
-    await renderRooms();
+    await setMeta("floorName", (el.floorName.value || "-").trim() || "-");
+  });
+
+  el.btnAddRoom?.addEventListener("click", async () => {
+    const roomDraft = normalizeRoomName(el.floorName?.value);
+    const rooms = await getRooms();
+    if (!rooms.includes(roomDraft)) {
+      rooms.push(roomDraft);
+      await setRooms(rooms);
+    }
+    await setMeta("activeRoom", roomDraft);
+    await render();
   });
 
   el.onlyIncomplete?.addEventListener("change", async () => {

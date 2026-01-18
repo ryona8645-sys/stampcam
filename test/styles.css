@@ -110,3 +110,12 @@ input, select { min-height: 44px; }
 .kindStrip { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
 .kindStrip button { min-height:40px; padding:8px 10px; border-radius:999px; }
 .kindStrip button.sel { outline:2px solid #e6e6e6; }
+
+
+/* device number pad */
+.devicePad { margin-top:12px; display:grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap:8px; }
+.devicePad button { padding:12px 0; font-weight:800; border-radius:14px; }
+
+/* smaller checkbox row */
+.chkRow { display:flex; align-items:center; gap:10px; }
+.chkRow input[type="checkbox"] { width:18px; height:18px; transform: none; }
