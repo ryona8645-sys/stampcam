@@ -11,7 +11,6 @@ const el = {
 
   deviceNoPicker: document.getElementById("deviceNoPicker"),
   devicePad: document.getElementById("devicePad"),
-  btnFreeCapture: document.getElementById("btnFreeCapture"),
   activeRoomLabel: document.getElementById("activeRoomLabel"),
 
   btnExport: document.getElementById("btnExport"),
@@ -48,6 +47,7 @@ function makeDeviceKey(roomName, deviceIndex) {
 function makeRoomDeviceLabel(roomName, deviceIndex) {
   const room = normalizeRoomName(roomName);
   const idx = formatDeviceIndex(deviceIndex);
+  if (Number(deviceIndex) === 0) return `${room}_FREE`;
   return `${room}_機器${idx}`;
 }
 function sanitizeFile(s) {
@@ -235,19 +235,19 @@ async function renderRooms() {
     const btnBox = document.createElement("div");
     btnBox.className = "roomBtns";
 
-    // "free" room: a dedicated FREE button that switches the photo list
-    if (isFree) {
-      const b = document.createElement("button");
-      b.textContent = "FREE";
-      const key = makeDeviceKey("free", 0);
-      if (key === activeKey) b.classList.add("sel");
-      b.addEventListener("click", async () => {
-        await setMeta("activeDeviceKey", key);
-        await render();
-      });
-      btnBox.appendChild(b);
-    }
 
+    // FREE撮影（機器Noなし）ボタン：部屋ごとに用意
+    {
+      const bFree = document.createElement("button");
+      bFree.textContent = "FREE";
+      const keyFree = makeDeviceKey(room, 0);
+      if (keyFree === activeKey) bFree.classList.add("sel");
+      bFree.addEventListener("click", async () => {
+        await setMeta("activeDeviceKey", keyFree);
+        location.href = `./camera.html?deviceKey=${encodeURIComponent(keyFree)}&free=1`;
+      });
+      btnBox.appendChild(bFree);
+    }
     const items = (groups.get(room) || []).slice().sort((a, b) => Number(a.deviceIndex) - Number(b.deviceIndex));
 
     for (const d of items) {
@@ -516,14 +516,6 @@ async function init() {
   el.onlyIncomplete?.addEventListener("change", async () => {
     await setMeta("onlyIncomplete", el.onlyIncomplete.checked ? "1" : "0");
     await renderRooms();
-  });
-
-  el.btnFreeCapture?.addEventListener("click", async () => {
-    // フリー撮影: free枠に切替して撮影画面へ
-    await setMeta("activeRoom", "free");
-    const key = makeDeviceKey("free", 0);
-    await setMeta("activeDeviceKey", key);
-    location.href = `./camera.html?deviceKey=${encodeURIComponent(key)}&free=1`;
   });
 
   el.btnOpenCamera?.addEventListener("click", async () => {

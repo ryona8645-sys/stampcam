@@ -294,7 +294,7 @@ async function takeShot(){
 
 async function init(){
   deviceKey = qparam("deviceKey");
-  freeMode = qparam("free") === "1" || String(deviceKey).startsWith("free::000");
+  freeMode = qparam("free") === "1" || String(deviceKey).endsWith("::000");
   if (!deviceKey){
     alert("deviceKeyがありません。");
     location.href = "./index.html";
