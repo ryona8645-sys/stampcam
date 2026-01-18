@@ -12,11 +12,16 @@ const KIND_LABEL = {
 };
 const REQUIRED_KINDS = ["overview","lamp","port","label"];
 
+// ブレ判定（簡易）：縮小グレースケールに対してラプラシアンの分散
+// 値が小さいほどボケ。閾値は端末差があるので実運用で調整前提。
+// 初期値はやや緩め。
+const BLUR_THRESHOLD = 65; // 目安: 40-120くらいで調整
+
 function normalizeRoomName(s) {
-  return String(s || "").trim() || "（未設定）";
+  return String(s || "").trim() || "-";
 }
 function formatDeviceIndex(n) {
-  return String(n).padStart(2, "0");
+  return String(n).padStart(3, "0");
 }
 function makeRoomDeviceLabel(roomName, deviceIndex) {
   const room = normalizeRoomName(roomName);
@@ -43,14 +48,9 @@ const el = {
 
   btnShutter: document.getElementById("btnShutter"),
   kindStrip: document.getElementById("kindStrip"),
-  kindStatus: document.getElementById("kindStatus"),
-  btnDrawer: document.getElementById("btnDrawer"),
+  statusLine: document.getElementById("statusLine"),
 
-  drawer: document.getElementById("drawer"),
-  btnCloseDrawer: document.getElementById("btnCloseDrawer"),
-  lastImg: document.getElementById("lastImg"),
-  lastInfo: document.getElementById("lastInfo"),
-  btnOpenLast: document.getElementById("btnOpenLast"),
+  toast: document.getElementById("toast"),
 
   preview: document.getElementById("preview"),
   previewImg: document.getElementById("previewImg"),
@@ -69,7 +69,7 @@ let stream = null;
 let track = null;
 let torchOn = false;
 
-let use4k = false;
+let use4k = false; // デフォルト 1280×720
 let zoom = 1;
 
 let selectedKind = "overview";
@@ -77,11 +77,13 @@ let selectedKind = "overview";
 let previewUrl = null;
 let modalZoom = 1;
 
-async function getMeta(key, fallback = "") {
-  const v = await db.meta.get(key);
-  return v?.value ?? fallback;
+function toast(msg, ms = 1200) {
+  if (!el.toast) return;
+  el.toast.textContent = msg;
+  el.toast.classList.remove("hidden");
+  if (toast._t) clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.toast.classList.add("hidden"), ms);
 }
-async function getProjectName() { return await getMeta("projectName",""); }
 
 async function upsertDeviceByKey(key) {
   const updatedAt = Date.now();
@@ -101,13 +103,9 @@ async function upsertDeviceByKey(key) {
   });
 }
 
-async function recomputeChecked(key) {
+async function recomputeDone(key) {
   const shots = await db.shots.where("deviceKey").equals(key).toArray();
-  const done = new Set(shots.map(s=>s.kind));
-  const checked = REQUIRED_KINDS.every(k => done.has(k));
-  const dev = await db.devices.get(key);
-  if (dev) await db.devices.put({ ...dev, checked, updatedAt: Date.now() });
-  return checked;
+  return new Set(shots.map(s=>s.kind));
 }
 
 async function makeThumbnail(blob, maxSide = 320, quality = 0.7) {
@@ -189,22 +187,6 @@ function applyZoom(val) {
   }
 }
 
-function openDrawer() { el.drawer?.classList.remove("hidden"); }
-function closeDrawer() { el.drawer?.classList.add("hidden"); }
-
-function openPreview(title, blob) {
-  if (previewUrl) URL.revokeObjectURL(previewUrl);
-  previewUrl = URL.createObjectURL(blob);
-
-  modalZoom = 1;
-  el.previewImg.style.transformOrigin = "0 0";
-  el.previewImg.style.transform = `scale(${modalZoom})`;
-  el.previewImg.src = previewUrl;
-  el.previewTitle.textContent = title;
-
-  el.preview.classList.remove("hidden");
-}
-
 function closePreview() {
   el.preview.classList.add("hidden");
   if (previewUrl) {
@@ -218,7 +200,7 @@ function setModalZoom(next) {
   el.previewImg.style.transform = `scale(${modalZoom})`;
 }
 
-async function renderKindStrip() {
+function renderKindGrid() {
   if (!el.kindStrip) return;
   el.kindStrip.innerHTML = "";
 
@@ -228,19 +210,62 @@ async function renderKindStrip() {
     if (k === selectedKind) b.classList.add("sel");
     b.addEventListener("click", () => {
       selectedKind = k;
-      renderKindStrip();
-      renderKindStatus();
+      renderKindGrid();
+      renderStatusLine();
     });
     el.kindStrip.appendChild(b);
   }
 }
 
-async function renderKindStatus() {
-  if (!el.kindStatus) return;
-  const shots = await db.shots.where("deviceKey").equals(deviceKey).toArray();
-  const done = new Set(shots.map(s=>s.kind));
-  const must = REQUIRED_KINDS.map(k => `${KIND_LABEL[k]}${done.has(k) ? "✅" : "□"}`).join(" / ");
-  el.kindStatus.textContent = `選択:${KIND_LABEL[selectedKind]} / 必須:${must}`;
+let lastDone = new Set();
+function renderStatusLine() {
+  if (!el.statusLine) return;
+  const label = makeRoomDeviceLabel(roomName, deviceIndex);
+  const must = REQUIRED_KINDS.map(k => `${KIND_LABEL[k]}${lastDone.has(k) ? "✅" : "□"}`).join(" ");
+  el.statusLine.textContent = `${label} / ${KIND_LABEL[selectedKind]} / ${must}`;
+}
+
+/** blur score (variance of Laplacian) */
+function blurScoreFromImageData(imgData) {
+  const data = imgData.data;
+  const width = imgData.width;
+  const height = imgData.height;
+
+  const g = new Float32Array(width * height);
+  for (let i = 0, p = 0; i < g.length; i++, p += 4) {
+    g[i] = 0.299*data[p] + 0.587*data[p+1] + 0.114*data[p+2];
+  }
+
+  let sum = 0;
+  let sum2 = 0;
+  let count = 0;
+
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      const i = y * width + x;
+      const lap = (g[i - width] + g[i - 1] + g[i + 1] + g[i + width]) - 4*g[i];
+      sum += lap;
+      sum2 += lap * lap;
+      count++;
+    }
+  }
+  const mean = sum / count;
+  const variance = (sum2 / count) - mean * mean;
+  return variance;
+}
+
+function getDownsampleImageData(srcCanvas, targetMax = 240) {
+  const w = srcCanvas.width;
+  const h = srcCanvas.height;
+  const scale = Math.min(1, targetMax / Math.max(w, h));
+  const tw = Math.max(64, Math.round(w * scale));
+  const th = Math.max(64, Math.round(h * scale));
+
+  const c = document.createElement("canvas");
+  c.width = tw; c.height = th;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(srcCanvas, 0, 0, tw, th);
+  return ctx.getImageData(0, 0, tw, th);
 }
 
 async function takeShot() {
@@ -253,61 +278,45 @@ async function takeShot() {
 
   const c = el.canvas;
   c.width = w; c.height = h;
-  const ctx = c.getContext("2d", { alpha:false });
+  const ctx = c.getContext("2d", { alpha:false, willReadFrequently: true });
   ctx.drawImage(v, 0, 0, w, h);
+
+  // ブレ判定（保存前に破棄）
+  try {
+    const small = getDownsampleImageData(c, 240);
+    const score = blurScoreFromImageData(small);
+    if (score < BLUR_THRESHOLD) {
+      toast(`ブレ判定:破棄（${Math.round(score)}）`);
+      return;
+    }
+  } catch (e) {
+    console.warn("blur check failed", e);
+  }
 
   const blob = await new Promise((resolve)=>c.toBlob(resolve,"image/jpeg",0.85));
   if (!blob) return alert("撮影失敗");
 
-  const { thumb, w:tw, h:th } = await makeThumbnail(blob);
+  const th = await makeThumbnail(blob);
 
-  const shotId = await db.shots.add({
+  await db.shots.add({
     deviceKey,
     kind: selectedKind,
     createdAt: Date.now(),
     mime: blob.type,
     blob,
-    thumbMime: thumb.type,
-    thumbBlob: thumb,
-    w, h, tw, th
+    thumbMime: th.thumb.type,
+    thumbBlob: th.thumb,
+    w, h, tw: th.w, th: th.h
   });
 
-  await db.meta.put({ key: "lastShotId", value: String(shotId) });
+  // checked更新
+  lastDone = await recomputeDone(deviceKey);
+  const checked = REQUIRED_KINDS.every(k => lastDone.has(k));
+  const dev = await db.devices.get(deviceKey);
+  if (dev) await db.devices.put({ ...dev, checked, updatedAt: Date.now() });
 
-  await recomputeChecked(deviceKey);
-  await renderDrawer();
-  await renderKindStatus();
-}
-
-async function renderDrawer() {
-  const lastId = (await db.meta.get("lastShotId"))?.value || "";
-  if (!el.lastInfo || !el.lastImg || !el.btnOpenLast) return;
-
-  if (!lastId) {
-    el.lastInfo.textContent = "直前の写真なし";
-    el.lastImg.removeAttribute("src");
-    el.btnOpenLast.disabled = true;
-    return;
-  }
-
-  const shot = await db.shots.get(Number(lastId));
-  if (!shot) {
-    el.lastInfo.textContent = "直前の写真なし";
-    el.lastImg.removeAttribute("src");
-    el.btnOpenLast.disabled = true;
-    return;
-  }
-
-  el.btnOpenLast.disabled = false;
-
-  const label = makeRoomDeviceLabel(roomName, deviceIndex);
-  el.lastInfo.textContent = `${label} / ${KIND_LABEL[shot.kind] || shot.kind} / ${new Date(shot.createdAt).toLocaleString()}`;
-
-  const url = URL.createObjectURL(shot.thumbBlob || shot.blob);
-  el.lastImg.src = url;
-  setTimeout(()=>URL.revokeObjectURL(url), 30_000);
-
-  el.btnOpenLast.onclick = () => openPreview(el.lastInfo.textContent, shot.blob);
+  renderStatusLine();
+  toast("保存しました");
 }
 
 async function init() {
@@ -318,34 +327,28 @@ async function init() {
     return;
   }
 
-  {
-    const [r, idx] = String(deviceKey).split("::");
-    roomName = normalizeRoomName(r);
-    deviceIndex = Number(idx);
-  }
+  const parts = String(deviceKey).split("::");
+  roomName = normalizeRoomName(parts[0]);
+  deviceIndex = Number(parts[1]);
 
   await upsertDeviceByKey(deviceKey);
 
-  const pj = (await getProjectName()).trim();
   const label = makeRoomDeviceLabel(roomName, deviceIndex);
-  if (el.camTitle) el.camTitle.textContent = `撮影 ${label} ${pj ? "["+pj+"]" : ""}`;
+  if (el.camTitle) el.camTitle.textContent = `撮影 / ${label}`;
 
   el.btnBack?.addEventListener("click", async () => {
     await stopCamera();
     location.href = "./index.html";
   });
 
-  el.btnDrawer?.addEventListener("click", () => openDrawer());
-  el.btnCloseDrawer?.addEventListener("click", () => closeDrawer());
-
   el.closePreview?.addEventListener("click", closePreview);
   el.preview?.addEventListener("click", (e) => { if (e.target === el.preview) closePreview(); });
   el.zoomIn?.addEventListener("click", () => setModalZoom(modalZoom * 1.25));
   el.zoomOut?.addEventListener("click", () => setModalZoom(modalZoom / 1.25));
-  el.zoomReset?.addEventListener("click", () => setModalZoom(1));
+  el.zoomReset?.addEventListener("click", () => { modalZoom = 1; el.previewImg.style.transform = "scale(1)"; });
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") { closePreview(); closeDrawer(); }
+    if (e.key === "Escape") closePreview();
   });
 
   el.zoom?.addEventListener("input", () => applyZoom(Number(el.zoom.value)));
@@ -356,22 +359,25 @@ async function init() {
     const ok = await applyTorch(torchOn);
     if (!ok) {
       torchOn = false;
-      alert("この端末/ブラウザではライト制御に対応していません。");
+      toast("ライト非対応");
     }
     if (el.btnTorch) el.btnTorch.textContent = torchOn ? "ライトON" : "ライト";
   });
 
   el.btnRes?.addEventListener("click", async () => {
     use4k = !use4k;
-    if (el.btnRes) el.btnRes.textContent = use4k ? "解像度 3840×2160" : "解像度 1280×720";
+    if (el.btnRes) el.btnRes.textContent = use4k ? "3840×2160" : "1280×720";
     await restartCamera();
   });
 
   el.btnShutter?.addEventListener("click", takeShot);
 
-  await renderKindStrip();
-  await renderDrawer();
-  await renderKindStatus();
+  if (el.btnRes) el.btnRes.textContent = use4k ? "3840×2160" : "1280×720";
+
+  renderKindGrid();
+
+  lastDone = await recomputeDone(deviceKey);
+  renderStatusLine();
 
   try {
     await startCamera();

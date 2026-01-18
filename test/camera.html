@@ -5,27 +5,32 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>撮影</title>
   <link rel="manifest" href="./manifest.webmanifest">
-  <meta name="theme-color" content="#111111">
+  <meta name="theme-color" content="#0b0f17">
   <link rel="stylesheet" href="./styles.css" />
 </head>
-<body class="camBody">
+<body class="camBody modern">
   <div class="camStage" id="camStage">
     <video id="video" class="camVideo" playsinline></video>
     <canvas id="canvas" hidden></canvas>
 
-    <header class="camTop">
+    <header class="camTop modernTop">
       <div class="camTopTitle" id="camTitle">撮影</div>
       <button id="btnBack" class="camTopBtn">戻る</button>
     </header>
 
-    <div class="camDock">
-      <div class="camStatusRow">
-        <div id="kindStatus" class="camStatusText"></div>
-        <button id="btnDrawer" class="camMiniBtn">直前</button>
-      </div>
+    <div class="camDock modernDock">
+      <div class="camStatusLine" id="statusLine">-</div>
 
-      <div class="camKindRow">
-        <div id="kindStrip" class="camKindStrip"></div>
+      <div class="camKindGrid" id="kindStrip"></div>
+
+      <div class="camControlsRow">
+        <button id="btnTorch" class="camPill">ライト</button>
+
+        <div class="camShutterWrap">
+          <button id="btnShutter" class="camShutter" aria-label="撮影"></button>
+        </div>
+
+        <button id="btnRes" class="camPill">1280×720</button>
       </div>
 
       <div class="camZoomRow">
@@ -33,33 +38,9 @@
         <input id="zoom" type="range" min="1" max="6" value="1" step="0.1" />
         <span id="zoomVal" class="camZoomVal">1.0x</span>
       </div>
-
-      <div class="camBtnRow">
-        <div class="camBtnLeft">
-          <button id="btnTorch" class="camMiniBtn">ライト</button>
-        </div>
-
-        <button id="btnShutter" class="camShutter" aria-label="撮影"></button>
-
-        <div class="camBtnRight">
-          <button id="btnRes" class="camMiniBtn">1280×720</button>
-        </div>
-      </div>
     </div>
 
-    <aside id="drawer" class="rdrawer hidden" aria-label="直前の写真プレビュー">
-      <div class="rd-header">
-        <span>プレビュー</span>
-        <button class="close-btn" id="btnCloseDrawer">閉じる</button>
-      </div>
-      <div class="rd-body">
-        <div id="lastInfo" class="meta" style="padding:10px 12px;"></div>
-        <img id="lastImg" alt="直前写真プレビュー" />
-        <div style="padding:10px 12px;">
-          <button id="btnOpenLast" class="camMiniBtn" style="width:100%;">拡大表示</button>
-        </div>
-      </div>
-    </aside>
+    <div id="toast" class="toast hidden"></div>
 
     <div id="preview" class="modal hidden">
       <div class="modalBar">
