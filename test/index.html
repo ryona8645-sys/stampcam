@@ -19,33 +19,30 @@
   </header>
 
   <main class="wrap">
+
     <section class="panel">
       <h2>案件情報</h2>
       <div class="row">
-        <input id="projectName" placeholder="案件名（例：本社LAN更新）" />
-        <input id="roomName" placeholder="部屋名 / フロア名（例：3F 会議室）" />
-        <button id="btnSaveMeta">保存</button>
+        <input id="projectName" placeholder="案件名" />
+        <input id="floorName" placeholder="フロア名 / 部屋名" />
       </div>
       <div class="hint">※ファイル名に [案件名][フロア名] を付与します（自動保存）</div>
     </section>
 
     <section class="panel">
-      <div class="row space">
-        <h2>機器No選択（001〜199）</h2>
-        <div class="row">
-          <input id="noFilter" placeholder="絞り込み（例：12）" style="max-width:220px;" />
-          <button id="btnClearFilter">クリア</button>
-        </div>
+      <h2>機器No選択（001〜199）</h2>
+      <div id="devicePad" class="pad"></div>
+      <div class="hint">※タップで機器Noを選択します（必要なら自動で機器を追加）</div>
+    </section>
+
+    <section class="panel">
+      <h2>機器追加</h2>
+      <div class="row">
+        <input id="deviceNo" placeholder="機器No (例: 001)" />
+        <input id="deviceType" placeholder="機器種別 (任意)" />
+        <button id="btnAdd">追加</button>
       </div>
-      <div class="hint">※ボタンを押すと「選択中の機器No」になり、未登録なら自動で機器として追加されます。</div>
-      <div id="noGrid" class="grid"></div>
-      <div class="row" style="margin-top:10px;">
-        <div style="opacity:.85;font-size:12px;">選択中：</div>
-        <div id="selectedNo" style="font-weight:700;"></div>
-        <div style="flex:1;"></div>
-        <input id="deviceType" placeholder="機器種別（任意）" />
-        <button id="btnUpdateType">種別を保存</button>
-      </div>
+      <div class="hint">※チェック/写真は自動保存（IndexedDB）</div>
     </section>
 
     <section class="panel">
@@ -107,6 +104,7 @@
     </div>
   </div>
 
+  <!-- ライブラリ（CDN）。厳密なオフラインにしたいならローカル配置に切り替える -->
   <script src="https://cdn.jsdelivr.net/npm/dexie@4/dist/dexie.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
 

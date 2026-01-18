@@ -8,6 +8,7 @@ export function openDb() {
     meta: "key"
   }).upgrade(async () => {
     // v1 -> v2: 既存データのサムネ一括生成は重いので実施しない。
+    // 新規撮影からthumb付きで保存する。
   });
 
   return db;
