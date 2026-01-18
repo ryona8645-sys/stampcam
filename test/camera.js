@@ -69,7 +69,7 @@ let stream = null;
 let track = null;
 let torchOn = false;
 
-let use4k = true;
+let use4k = false;
 let zoom = 1;
 
 let selectedKind = "overview";

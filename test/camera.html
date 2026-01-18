@@ -2,80 +2,78 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>撮影</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <meta name="theme-color" content="#111111">
   <link rel="stylesheet" href="./styles.css" />
 </head>
-<body>
-  <header class="bar">
-    <div class="title" id="camTitle">撮影</div>
-    <div class="right">
-      <button id="btnBack">戻る</button>
-    </div>
-  </header>
+<body class="camBody">
+  <div class="camStage" id="camStage">
+    <video id="video" class="camVideo" playsinline></video>
+    <canvas id="canvas" hidden></canvas>
 
-  <main class="camWrap">
-    <section class="camPanel">
-      <div class="camBox">
-        <video id="video" playsinline></video>
-        <canvas id="canvas" hidden></canvas>
+    <header class="camTop">
+      <div class="camTopTitle" id="camTitle">撮影</div>
+      <button id="btnBack" class="camTopBtn">戻る</button>
+    </header>
+
+    <div class="camDock">
+      <div class="camStatusRow">
+        <div id="kindStatus" class="camStatusText"></div>
+        <button id="btnDrawer" class="camMiniBtn">直前</button>
       </div>
 
-      <div class="controls">
-        <div class="controlsRow">
-          <button id="btnTorch">ライト</button>
-          <button id="btnRes">解像度 3840×2160</button>
+      <div class="camKindRow">
+        <div id="kindStrip" class="camKindStrip"></div>
+      </div>
+
+      <div class="camZoomRow">
+        <label class="camZoomLabel" for="zoom">ズーム</label>
+        <input id="zoom" type="range" min="1" max="6" value="1" step="0.1" />
+        <span id="zoomVal" class="camZoomVal">1.0x</span>
+      </div>
+
+      <div class="camBtnRow">
+        <div class="camBtnLeft">
+          <button id="btnTorch" class="camMiniBtn">ライト</button>
         </div>
 
-        <div class="controlsRow">
-          <label class="zoomLabel">ズーム</label>
-          <input id="zoom" type="range" min="1" max="6" value="1" step="0.1" />
-          <span id="zoomVal" class="mono">1.0x</span>
+        <button id="btnShutter" class="camShutter" aria-label="撮影"></button>
+
+        <div class="camBtnRight">
+          <button id="btnRes" class="camMiniBtn">1280×720</button>
         </div>
       </div>
-    </section>
-  </main>
-
-  <div class="camFixedBar">
-    <button id="btnShutter" class="shutter" aria-label="撮影"></button>
-  </div>
-
-  <div class="panel" style="margin:12px;">
-    <div class="row space">
-      <div class="meta" id="kindStatus"></div>
-      <button id="btnDrawer">直前</button>
     </div>
-    <div class="kindStrip" id="kindStrip"></div>
-  </div>
 
-  <aside id="drawer" class="drawer hidden">
-    <div class="drawerBar">
-      <div class="drawerTitle">直前の写真</div>
-      <button id="btnCloseDrawer" class="danger">閉じる</button>
-    </div>
-    <div class="drawerBody">
-      <div id="lastInfo" class="meta"></div>
-      <img id="lastImg" class="drawerImg" alt="">
-      <div class="row" style="margin-top:10px;">
-        <button id="btnOpenLast">拡大表示</button>
+    <aside id="drawer" class="rdrawer hidden" aria-label="直前の写真プレビュー">
+      <div class="rd-header">
+        <span>プレビュー</span>
+        <button class="close-btn" id="btnCloseDrawer">閉じる</button>
       </div>
-    </div>
-  </aside>
-
-  <div id="preview" class="modal hidden">
-    <div class="modalBar">
-      <div id="previewTitle" class="modalTitle"></div>
-      <div class="modalBtns">
-        <button id="zoomOut">-</button>
-        <button id="zoomReset">等倍</button>
-        <button id="zoomIn">+</button>
-        <button id="closePreview" class="danger">閉じる</button>
+      <div class="rd-body">
+        <div id="lastInfo" class="meta" style="padding:10px 12px;"></div>
+        <img id="lastImg" alt="直前写真プレビュー" />
+        <div style="padding:10px 12px;">
+          <button id="btnOpenLast" class="camMiniBtn" style="width:100%;">拡大表示</button>
+        </div>
       </div>
-    </div>
-    <div class="modalBody">
-      <img id="previewImg" alt="">
+    </aside>
+
+    <div id="preview" class="modal hidden">
+      <div class="modalBar">
+        <div id="previewTitle" class="modalTitle"></div>
+        <div class="modalBtns">
+          <button id="zoomOut">-</button>
+          <button id="zoomReset">等倍</button>
+          <button id="zoomIn">+</button>
+          <button id="closePreview" class="danger">閉じる</button>
+        </div>
+      </div>
+      <div class="modalBody">
+        <img id="previewImg" alt="">
+      </div>
     </div>
   </div>
 
