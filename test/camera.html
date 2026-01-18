@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>撮影</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" content="#111111">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="bar">
+    <div class="title" id="camTitle">撮影</div>
+    <div class="right">
+      <button id="btnBack">戻る</button>
+      <button id="btnDrawer">プレビュー</button>
+    </div>
+  </header>
+
+  <main class="camWrap">
+    <section class="camPanel">
+      <div class="camBox">
+        <video id="video" playsinline></video>
+        <canvas id="canvas" hidden></canvas>
+      </div>
+
+      <div class="controls">
+        <div class="controlsRow">
+          <button id="btnShot" class="primary">撮影</button>
+          <button id="btnTorch">ライト</button>
+          <button id="btnRes">解像度 3840×2160</button>
+        </div>
+
+        <div class="controlsRow">
+          <label class="zoomLabel">ズーム</label>
+          <input id="zoom" type="range" min="1" max="6" value="1" step="0.1" />
+          <span id="zoomVal" class="mono">1.0x</span>
+        </div>
+
+        <div class="kindRow" id="kindRow"></div>
+      </div>
+
+      <div class="shotListHead">
+        <h3>撮影済み（サムネ）</h3>
+        <div id="shotMeta" class="meta"></div>
+      </div>
+      <div id="shots" class="shots"></div>
+    </section>
+  </main>
+
+  <aside id="drawer" class="drawer hidden">
+    <div class="drawerBar">
+      <div class="drawerTitle">直前の写真</div>
+      <button id="btnCloseDrawer" class="danger">閉じる</button>
+    </div>
+    <div class="drawerBody">
+      <div id="lastInfo" class="meta"></div>
+      <img id="lastImg" class="drawerImg" alt="">
+      <div class="row" style="margin-top:10px;">
+        <button id="btnOpenLast">拡大表示</button>
+      </div>
+    </div>
+  </aside>
+
+  <div id="preview" class="modal hidden">
+    <div class="modalBar">
+      <div id="previewTitle" class="modalTitle"></div>
+      <div class="modalBtns">
+        <button id="zoomOut">-</button>
+        <button id="zoomReset">等倍</button>
+        <button id="zoomIn">+</button>
+        <button id="closePreview" class="danger">閉じる</button>
+      </div>
+    </div>
+    <div class="modalBody">
+      <img id="previewImg" alt="">
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/dexie@4/dist/dexie.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
+  <script type="module" src="./camera.js"></script>
+</body>
+</html>
