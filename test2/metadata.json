@@ -1,0 +1,7 @@
+{
+  "name": "ICT Survey Cam",
+  "description": "Offline-first PWA for ICT equipment surveys with organized photo management.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
