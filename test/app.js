@@ -1,19 +1,32 @@
 import { openDb } from "./db.js";
 
-const REQUIRED_KINDS = ["overview", "lamp", "port", "label"];
+const REQUIRED_KINDS = ["overview", "lamp", "port", "label"]; // 必須はこの4つのみ
+const OPTIONAL_KINDS = ["ipaddress"];
+const ALL_KINDS = [...REQUIRED_KINDS, ...OPTIONAL_KINDS];
+
 const KIND_LABEL = {
   overview: "全景",
   lamp: "ランプ",
   port: "ポート",
-  label: "ラベル"
+  label: "ラベル",
+  ipaddress: "IPアドレス",
 };
 
 const db = openDb();
 
 const el = {
-  deviceNo: document.getElementById("deviceNo"),
+  projectName: document.getElementById("projectName"),
+  roomName: document.getElementById("roomName"),
+  btnSaveMeta: document.getElementById("btnSaveMeta"),
+
+  noFilter: document.getElementById("noFilter"),
+  btnClearFilter: document.getElementById("btnClearFilter"),
+  noGrid: document.getElementById("noGrid"),
+  selectedNo: document.getElementById("selectedNo"),
+
   deviceType: document.getElementById("deviceType"),
-  btnAdd: document.getElementById("btnAdd"),
+  btnUpdateType: document.getElementById("btnUpdateType"),
+
   deviceList: document.getElementById("deviceList"),
   onlyIncomplete: document.getElementById("onlyIncomplete"),
 
@@ -41,7 +54,6 @@ const el = {
 };
 
 let stream = null;
-
 let previewUrl = null;
 let zoom = 1;
 
@@ -52,6 +64,19 @@ async function registerSw() {
   } catch (e) {
     console.warn("SW register failed:", e);
   }
+}
+
+function pad3(n) { return String(n).padStart(3, "0"); }
+
+function formatShotTime(ts) {
+  const d = new Date(ts);
+  const pad = (x) => String(x).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+}
+
+function sanitizeFile(s) {
+  // Windowsの禁止文字だけ置換。角括弧[]は残す（要求の形式に合わせる）
+  return String(s).replace(/[\\/:*?"<>|]/g, "_").trim();
 }
 
 async function makeThumbnail(blob, maxSide = 320, quality = 0.7) {
@@ -97,45 +122,43 @@ function setZoom(next) {
   el.previewImg.style.transform = `scale(${zoom})`;
 }
 
-function nowIsoSafe() {
-  const d = new Date();
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+async function metaGet(key, def = "") {
+  const v = await db.meta.get(key);
+  return v?.value ?? def;
 }
 
-function sanitizeFile(s) {
-  return String(s).replace(/[\\/:*?"<>|]/g, "_");
+async function metaSet(key, value) {
+  await db.meta.put({ key, value: String(value ?? "") });
 }
 
-async function upsertDevice(deviceNo, deviceType) {
+async function upsertDevice(deviceNo) {
   const existing = await db.devices.where("deviceNo").equals(deviceNo).first();
   const updatedAt = Date.now();
   if (existing) {
-    await db.devices.update(existing.id, { deviceType, updatedAt });
+    await db.devices.update(existing.id, { updatedAt });
     return existing.id;
   }
   return await db.devices.add({
     deviceNo,
-    deviceType: deviceType || "",
+    deviceType: "",
     checked: false,
     updatedAt
   });
 }
 
 async function setActiveDevice(deviceNo) {
-  await db.meta.put({ key: "activeDeviceNo", value: deviceNo });
+  await metaSet("activeDeviceNo", deviceNo);
+  await metaSet("selectedDeviceNo", deviceNo);
   await render();
 }
 
 async function getActiveDeviceNo() {
-  const v = await db.meta.get("activeDeviceNo");
-  return v?.value || "";
+  return await metaGet("activeDeviceNo", "");
 }
 
 async function computeDoneKinds(deviceNo) {
   const shots = await db.shots.where("deviceNo").equals(deviceNo).toArray();
-  const done = new Set(shots.map(s => s.kind));
-  return done;
+  return new Set(shots.map(s => s.kind));
 }
 
 async function recomputeChecked(deviceNo) {
@@ -146,23 +169,54 @@ async function recomputeChecked(deviceNo) {
   return ok;
 }
 
-async function addDeviceFromUi() {
-  const deviceNo = el.deviceNo.value.trim();
-  if (!deviceNo) return alert("機器Noが空です");
-  await upsertDevice(deviceNo, el.deviceType.value.trim());
-  el.deviceNo.value = "";
-  el.deviceType.value = "";
-  await setActiveDevice(deviceNo);
+async function saveMeta() {
+  await metaSet("projectName", el.projectName.value.trim());
+  await metaSet("roomName", el.roomName.value.trim());
+  await render();
+}
+
+async function updateTypeForSelected() {
+  const no = await metaGet("selectedDeviceNo", "");
+  if (!no) return alert("機器Noが選択されていません");
+  await upsertDevice(no);
+  const dev = await db.devices.where("deviceNo").equals(no).first();
+  if (dev) await db.devices.update(dev.id, { deviceType: el.deviceType.value.trim(), updatedAt: Date.now() });
+  await render();
 }
 
 async function toggleOnlyIncomplete() {
-  await db.meta.put({ key: "onlyIncomplete", value: el.onlyIncomplete.checked ? "1" : "0" });
+  await metaSet("onlyIncomplete", el.onlyIncomplete.checked ? "1" : "0");
   await render();
 }
 
 async function loadOnlyIncomplete() {
-  const v = await db.meta.get("onlyIncomplete");
-  return v?.value === "1";
+  return (await metaGet("onlyIncomplete", "0")) === "1";
+}
+
+function buildNoGrid(filterText, devicesMap, activeNo, selectedNo) {
+  el.noGrid.innerHTML = "";
+  const ft = (filterText || "").trim();
+
+  for (let i = 1; i <= 199; i++) {
+    const no = pad3(i);
+    if (ft && !no.includes(ft)) continue;
+
+    const btn = document.createElement("button");
+    btn.className = "noBtn";
+    btn.textContent = no;
+
+    const dev = devicesMap.get(no);
+    if (dev?.checked) btn.classList.add("done");
+    if (no === selectedNo || no === activeNo) btn.classList.add("sel");
+
+    btn.addEventListener("click", async () => {
+      await upsertDevice(no);
+      await metaSet("selectedDeviceNo", no);
+      await setActiveDevice(no);
+    });
+
+    el.noGrid.appendChild(btn);
+  }
 }
 
 async function startCamera() {
@@ -216,11 +270,10 @@ async function takeShot() {
     blob,
     thumbMime: thumb.type,
     thumbBlob: thumb,
-    w, h,
-    tw, th
+    w, h, tw, th
   });
 
-  await db.meta.put({ key: "lastShotId", value: String(shotId) });
+  await metaSet("lastShotId", String(shotId));
 
   await recomputeChecked(deviceNo);
   await setActiveDevice(deviceNo);
@@ -231,16 +284,21 @@ async function deleteShot(id) {
   if (!shot) return;
   await db.shots.delete(id);
   await recomputeChecked(shot.deviceNo);
-  await render();
 }
 
 async function renderDeviceList(devices) {
   el.deviceList.innerHTML = "";
   for (const d of devices) {
     const done = await computeDoneKinds(d.deviceNo);
-    const badges = REQUIRED_KINDS.map(k => {
+
+    const badgesReq = REQUIRED_KINDS.map(k => {
       const ok = done.has(k);
       return `<span class="badge ${ok ? "ok" : ""}">${KIND_LABEL[k]}</span>`;
+    }).join("");
+
+    const badgesOpt = OPTIONAL_KINDS.map(k => {
+      const ok = done.has(k);
+      return `<span class="badge opt ${ok ? "ok" : ""}">${KIND_LABEL[k]}</span>`;
     }).join("");
 
     const item = document.createElement("div");
@@ -250,7 +308,7 @@ async function renderDeviceList(devices) {
         <div><b>${d.deviceNo}</b> <span style="opacity:.8">${d.deviceType || ""}</span></div>
         <div style="opacity:.7;font-size:12px">更新: ${new Date(d.updatedAt).toLocaleString()}</div>
       </div>
-      <div class="badges">${badges}</div>
+      <div class="badges">${badgesReq}${badgesOpt}</div>
     `;
     item.addEventListener("click", () => setActiveDevice(d.deviceNo));
     el.deviceList.appendChild(item);
@@ -275,18 +333,17 @@ async function renderShots(deviceNo) {
     return;
   }
 
-  const lastShotId = (await db.meta.get("lastShotId"))?.value || "";
+  const lastShotId = await metaGet("lastShotId", "");
   const shots = await db.shots.where("deviceNo").equals(deviceNo).toArray();
   shots.sort((a,b) => b.createdAt - a.createdAt);
 
   const doneKinds = await computeDoneKinds(deviceNo);
-  el.shotMeta.textContent =
-    `必須: ${REQUIRED_KINDS.map(k => `${KIND_LABEL[k]}${doneKinds.has(k) ? "✅" : "□"}`).join(" / ")}`
-    + ` / 枚数: ${shots.length}`;
+  const reqText = REQUIRED_KINDS.map(k => `${KIND_LABEL[k]}${doneKinds.has(k) ? "✅" : "□"}`).join(" / ");
+  const optText = OPTIONAL_KINDS.map(k => `${KIND_LABEL[k]}${doneKinds.has(k) ? "✅" : "□"}`).join(" / ");
+  el.shotMeta.textContent = `必須: ${reqText} / 任意: ${optText} / 枚数: ${shots.length}`;
 
   for (const s of shots) {
     const isLast = String(s.id) === String(lastShotId);
-
     const showBlob = isLast ? s.blob : (s.thumbBlob || s.blob);
     const url = URL.createObjectURL(showBlob);
 
@@ -315,13 +372,16 @@ async function renderShots(deviceNo) {
     div.querySelector(`[data-del="${s.id}"]`).addEventListener("click", async (ev) => {
       ev.stopPropagation();
       URL.revokeObjectURL(url);
+
+      const shot = await db.shots.get(s.id);
       await deleteShot(s.id);
 
-      if (isLast) {
+      if (shot && String(shot.id) === String(lastShotId)) {
         const left = await db.shots.where("deviceNo").equals(deviceNo).toArray();
         left.sort((a,b)=>b.createdAt-a.createdAt);
-        await db.meta.put({ key: "lastShotId", value: left[0] ? String(left[0].id) : "" });
+        await metaSet("lastShotId", left[0] ? String(left[0].id) : "");
       }
+
       await render();
     });
 
@@ -331,8 +391,11 @@ async function renderShots(deviceNo) {
 }
 
 async function exportZip() {
-  const ts = nowIsoSafe();
-  const zipName = `stampcam_${ts}.zip`;
+  const zipTs = formatShotTime(Date.now());
+  const zipName = `stampcam_${zipTs}.zip`;
+
+  const projectName = sanitizeFile(await metaGet("projectName", ""));
+  const roomName = sanitizeFile(await metaGet("roomName", ""));
 
   const devices = await db.devices.orderBy("deviceNo").toArray();
   const shots = await db.shots.toArray();
@@ -348,7 +411,7 @@ async function exportZip() {
   ].join("\n");
 
   const progressCsv = [
-    "deviceNo,overview,lamp,port,label,checked",
+    "deviceNo,overview,lamp,port,label,ipaddress,checked",
     ...(await Promise.all(devices.map(async d => {
       const done = await computeDoneKinds(d.deviceNo);
       return [
@@ -357,6 +420,7 @@ async function exportZip() {
         done.has("lamp") ? "1" : "0",
         done.has("port") ? "1" : "0",
         done.has("label") ? "1" : "0",
+        done.has("ipaddress") ? "1" : "0",
         d.checked ? "1" : "0"
       ].join(",");
     })))
@@ -368,8 +432,19 @@ async function exportZip() {
   files["devices.csv"] = strToU8(devicesCsv);
   files["progress.csv"] = strToU8(progressCsv);
 
+  // ファイル名: [案件名][フロア名][機器No][写真種別][撮影時間].jpg
   for (const s of shots) {
-    const fname = `photos/${sanitizeFile(s.deviceNo)}/${s.kind}_${new Date(s.createdAt).toISOString().replace(/[:.]/g, "-")}.jpg`;
+    const shotTime = formatShotTime(s.createdAt);
+
+    const parts = [
+      `[${projectName}]`,
+      `[${roomName}]`,
+      `[${sanitizeFile(s.deviceNo)}]`,
+      `[${sanitizeFile(s.kind)}]`,
+      `[${shotTime}]`,
+    ].join("");
+
+    const fname = `photos/${sanitizeFile(s.deviceNo)}/${parts}.jpg`;
     const buf = new Uint8Array(await s.blob.arrayBuffer());
     files[fname] = buf;
   }
@@ -387,13 +462,13 @@ async function exportZip() {
 }
 
 function csvEscape(s) {
-  const t = String(s);
+  const t = String(s ?? "");
   if (/[,"\n]/.test(t)) return `"${t.replace(/"/g, '""')}"`;
   return t;
 }
 
 async function wipeAll() {
-  const ok = confirm("端末内データ（機器・写真・進捗）を全削除します。よろしいですか？");
+  const ok = confirm("端末内データ（機器・写真・進捗・案件情報）を全削除します。よろしいですか？");
   if (!ok) return;
   await db.devices.clear();
   await db.shots.clear();
@@ -434,34 +509,60 @@ async function checkStorage() {
 }
 
 async function render() {
+  el.projectName.value = await metaGet("projectName", "");
+  el.roomName.value = await metaGet("roomName", "");
+
   const onlyInc = await loadOnlyIncomplete();
   el.onlyIncomplete.checked = onlyInc;
 
-  let devices = await db.devices.orderBy("deviceNo").toArray();
-  if (onlyInc) devices = devices.filter(d => !d.checked);
+  const allDevices = await db.devices.orderBy("deviceNo").toArray();
+  const devicesMap = new Map(allDevices.map(d => [d.deviceNo, d]));
+
+  let listDevices = allDevices;
+  if (onlyInc) listDevices = listDevices.filter(d => !d.checked);
 
   const activeNo = await getActiveDeviceNo();
-  const allDevices = devices.length ? devices : await db.devices.orderBy("deviceNo").toArray();
-  await renderActiveDeviceSelect(allDevices, activeNo);
+  const selectedNo = await metaGet("selectedDeviceNo", activeNo || "");
+  el.selectedNo.textContent = selectedNo || "(未選択)";
+  el.deviceType.value = (devicesMap.get(selectedNo)?.deviceType) || "";
 
+  const ft = el.noFilter.value || "";
+  buildNoGrid(ft, devicesMap, activeNo, selectedNo);
+
+  await renderActiveDeviceSelect(allDevices, activeNo);
   el.activeDevice.value = activeNo || "";
 
-  await renderDeviceList(devices);
+  await renderDeviceList(listDevices);
   await renderShots(activeNo);
+
   await checkStorage();
 }
 
 async function init() {
   await registerSw();
 
-  el.btnAdd.addEventListener("click", addDeviceFromUi);
+  // meta
+  el.btnSaveMeta.addEventListener("click", saveMeta);
+  el.projectName.addEventListener("change", saveMeta);
+  el.roomName.addEventListener("change", saveMeta);
+
+  // filter
+  el.noFilter.addEventListener("input", () => render());
+  el.btnClearFilter.addEventListener("click", () => { el.noFilter.value = ""; render(); });
+
+  // type
+  el.btnUpdateType.addEventListener("click", updateTypeForSelected);
+
+  // list
   el.onlyIncomplete.addEventListener("change", toggleOnlyIncomplete);
   el.activeDevice.addEventListener("change", (e) => setActiveDevice(e.target.value));
 
+  // camera
   el.btnStart.addEventListener("click", startCamera);
   el.btnStop.addEventListener("click", stopCamera);
   el.btnShot.addEventListener("click", takeShot);
 
+  // export / wipe
   el.btnExport.addEventListener("click", exportZip);
   el.btnWipe.addEventListener("click", wipeAll);
 
@@ -473,7 +574,6 @@ async function init() {
   el.zoomIn.addEventListener("click", () => setZoom(zoom * 1.25));
   el.zoomOut.addEventListener("click", () => setZoom(zoom / 1.25));
   el.zoomReset.addEventListener("click", () => setZoom(1));
-
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") closePreview();
   });
