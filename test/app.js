@@ -7,6 +7,7 @@ const el = {
   btnAddRoom: document.getElementById("btnAddRoom"),
 
   roomList: document.getElementById("roomList"),
+  onlyIncomplete: document.getElementById("onlyIncomplete"),
 
   deviceNoPicker: document.getElementById("deviceNoPicker"),
   devicePad: document.getElementById("devicePad"),
@@ -65,7 +66,15 @@ async function getProjectName() { return await getMeta("projectName",""); }
 async function getRoomDraft() { return await getMeta("floorName",""); }
 async function getActiveRoom() { return await getMeta("activeRoom",""); }
 async function getActiveDeviceKey() { return await getMeta("activeDeviceKey",""); }
+async function loadOnlyIncomplete() { return (await getMeta("onlyIncomplete","0")) === "1"; }
 
+async function ensureFreeRoom() {
+  const rooms = await getRooms();
+  if (!rooms.includes("free")) {
+    rooms.push("free");
+    await setRooms(rooms);
+  }
+}
 
 async function getRooms() {
   const raw = await getMeta("rooms","[]");
@@ -136,6 +145,8 @@ async function openPreview(title, blob) {
 
 async function renderRooms() {
   const rooms = await getRooms();
+  const onlyInc = await loadOnlyIncomplete();
+  if (el.onlyIncomplete) el.onlyIncomplete.checked = onlyInc;
 
   const activeRoom = await getActiveRoom();
   const activeKey = await getActiveDeviceKey();
@@ -240,6 +251,7 @@ async function renderRooms() {
     const items = (groups.get(room) || []).slice().sort((a, b) => Number(a.deviceIndex) - Number(b.deviceIndex));
 
     for (const d of items) {
+      if (onlyInc && d.checked) continue;
 
       // 000はFREE扱いなので通常枠では非表示（free枠で扱う）
       if (room === "free" && Number(d.deviceIndex) === 0) continue;
@@ -501,7 +513,9 @@ async function init() {
     await render();
   });
 
-      await renderRooms();
+  el.onlyIncomplete?.addEventListener("change", async () => {
+    await setMeta("onlyIncomplete", el.onlyIncomplete.checked ? "1" : "0");
+    await renderRooms();
   });
 
   el.btnFreeCapture?.addEventListener("click", async () => {
