@@ -51,6 +51,7 @@ const el = {
 };
 
 let deviceKey = "";
+let freeMode = false;
 let roomName = "";
 let deviceIndex = 0;
 
@@ -104,12 +105,28 @@ function openKindModal(){ el.kindModal?.classList.remove("hidden"); }
 function closeKindModal(){ el.kindModal?.classList.add("hidden"); }
 
 function renderKindButton(){
-  const t = selectedKind ? `種別:${KIND_LABEL[selectedKind]}` : "種別:未選択";
+  const t = selectedKind ? `種別:${selectedKind.startsWith("free:") ? selectedKind.slice(5) : (KIND_LABEL[selectedKind] || selectedKind)}` : "種別:未選択";
   if (el.btnKind) el.btnKind.textContent = t;
 }
 function renderKindGrid(){
   if (!el.kindGrid) return;
   el.kindGrid.innerHTML = "";
+  if (freeMode){
+    const b = document.createElement("button");
+    b.textContent = "自由入力";
+    if (selectedKind && selectedKind.startsWith("free:")) b.classList.add("sel");
+    b.addEventListener("click", ()=>{
+      const v = prompt("写真種別（自由入力）", (selectedKind.startsWith("free:") ? selectedKind.slice(5) : ""));
+      if (!v) return;
+      selectedKind = "free:" + v.trim();
+      renderKindButton();
+      renderKindGrid();
+      closeKindModal();
+      showToast("種別を設定しました", 1200);
+    });
+    el.kindGrid.appendChild(b);
+  }
+
   for (const k of KINDS){
     const b = document.createElement("button");
     b.textContent = KIND_LABEL[k] || k;
@@ -256,7 +273,7 @@ async function takeShot(){
 
   const shotId = await db.shots.add({
     deviceKey,
-    kind: selectedKind,
+    kind: (selectedKind.startsWith("free:") ? ("free_" + selectedKind.slice(5)) : selectedKind),
     createdAt: Date.now(),
     mime: blob.type,
     blob,
@@ -271,11 +288,13 @@ async function takeShot(){
 
   // show progress only now (2:C)
   await showProgressToast();
-  showToast(`撮影: ${KIND_LABEL[selectedKind]} ✅`, 1200);
+  const kLabel = selectedKind.startsWith("free:") ? selectedKind.slice(5) : (KIND_LABEL[selectedKind] || selectedKind);
+  showToast(`撮影: ${kLabel} ✅`, 1200);
 }
 
 async function init(){
   deviceKey = qparam("deviceKey");
+  freeMode = qparam("free") === "1";
   if (!deviceKey){
     alert("deviceKeyがありません。");
     location.href = "./index.html";
@@ -283,9 +302,14 @@ async function init(){
   }
 
   {
-    const [r, idx] = String(deviceKey).split("::");
-    roomName = normalizeRoomName(r);
-    deviceIndex = Number(idx);
+    if (freeMode){
+      roomName = "フリー";
+      deviceIndex = 0;
+    } else {
+      const [r, idx] = String(deviceKey).split("::");
+      roomName = normalizeRoomName(r);
+      deviceIndex = Number(idx);
+    }
   }
 
   await upsertDeviceByKey(deviceKey);

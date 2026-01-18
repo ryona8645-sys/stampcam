@@ -11,6 +11,7 @@ const el = {
 
   deviceNoPicker: document.getElementById("deviceNoPicker"),
   devicePad: document.getElementById("devicePad"),
+  btnFreeCapture: document.getElementById("btnFreeCapture"),
   activeRoomLabel: document.getElementById("activeRoomLabel"),
 
   btnExport: document.getElementById("btnExport"),
@@ -33,7 +34,7 @@ const REQUIRED_KINDS = ["overview","lamp","port","label"];
 const KIND_LABEL = { overview:"全景", lamp:"ランプ", port:"ポート", label:"ラベル", ipaddress:"IPアドレス" };
 
 function normalizeRoomName(s) {
-  return String(s || "").trim() || "-";
+  return String(s || "").trim() || "（未設定）";
 }
 function formatDeviceIndex(n) {
   return String(n).padStart(3, "0"); // 001-199
@@ -60,8 +61,8 @@ async function setMeta(key, value) {
   await db.meta.put({ key, value: String(value ?? "") });
 }
 
-async function getProjectName() { return await getMeta("projectName","-"); }
-async function getRoomDraft() { return await getMeta("floorName","-"); }
+async function getProjectName() { return await getMeta("projectName",""); }
+async function getRoomDraft() { return await getMeta("floorName",""); }
 async function getActiveRoom() { return await getMeta("activeRoom",""); }
 async function getActiveDeviceKey() { return await getMeta("activeDeviceKey",""); }
 async function loadOnlyIncomplete() { return (await getMeta("onlyIncomplete","0")) === "1"; }
@@ -81,9 +82,9 @@ async function setRooms(arr) {
 
 async function ensureDefaults() {
   const pj = await getMeta("projectName","");
-  if (!pj) await setMeta("projectName","-");
+  if (pj === "") await setMeta("projectName","");
   const fl = await getMeta("floorName","");
-  if (!fl) await setMeta("floorName","-");
+  if (fl === "") await setMeta("floorName","");
 }
 
 async function upsertDevice(roomName, deviceIndex) {
@@ -421,11 +422,11 @@ async function init() {
   await ensureDefaults();
 
   el.projectName?.addEventListener("input", async () => {
-    await setMeta("projectName", (el.projectName.value || "-").trim() || "-");
+    await setMeta("projectName", String(el.projectName.value || "").trim());
   });
 
   el.floorName?.addEventListener("input", async () => {
-    await setMeta("floorName", (el.floorName.value || "-").trim() || "-");
+    await setMeta("floorName", String(el.floorName.value || "").trim());
   });
 
   el.btnAddRoom?.addEventListener("click", async () => {
@@ -444,10 +445,18 @@ async function init() {
     await renderRooms();
   });
 
+  el.btnFreeCapture?.addEventListener("click", async () => {
+    // フリー撮影（機器Noなし）
+    const key = `FREE::${Date.now()}`;
+    await setMeta("activeDeviceKey", key);
+    location.href = `./camera.html?deviceKey=${encodeURIComponent(key)}&free=1`;
+  });
+
   el.btnOpenCamera?.addEventListener("click", async () => {
     const key = await getActiveDeviceKey();
     if (!key) return alert("先に機器を選択してください。");
-    location.href = `./camera.html?deviceKey=${encodeURIComponent(key)}`;
+    const free = String(key).startsWith("FREE::") ? "&free=1" : "";
+    location.href = `./camera.html?deviceKey=${encodeURIComponent(key)}${free}`;
   });
 
   el.btnExport?.addEventListener("click", exportZip);

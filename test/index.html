@@ -30,7 +30,7 @@
   </section>
 
   <section class="panel">
-    <h2>機器選択</h2>
+    <h2>部屋選択</h2>
     <div id="roomList" class="roomList"></div>
 
     <div class="row" style="margin-top:10px;">
@@ -42,7 +42,7 @@
   </section>
 
   <section class="panel">
-    <details id="deviceNoPicker" open>
+    <details id="deviceNoPicker">
       <summary class="summaryRow">
         <span>機器No選択（001〜199）</span>
         <span id="activeRoomLabel" class="pill"></span>
@@ -52,14 +52,14 @@
         ※先に部屋を追加し、部屋枠をタップして対象部屋を選択してから番号を押してください
       </div>
 
-      <div id="devicePad" class="devicePad"></div>
+      <div class="row" style="margin-top:10px;"><button id="btnFreeCapture" class="primary" style="width:100%;">フリー撮影（機器Noなし）</button></div><div id="devicePad" class="devicePad"></div>
     </details>
   </section>
 
   <section class="panel">
     <div class="row space">
       <h2>写真一覧</h2>
-      <button id="btnOpenCamera" class="primary">撮影へ</button>
+      <button id="btnOpenCamera" class="primary cta">撮影へ</button>
     </div>
     <div id="photoMeta" class="meta"></div>
     <div id="photoGrid" class="shots"></div>

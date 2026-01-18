@@ -317,3 +317,21 @@ input, select { min-height: 44px; }
   color:rgba(255,255,255,.72);
   font-size:12px;
 }
+
+
+
+/* ===== Main UI v9 (mobile fit) ===== */
+html, body { width:100%; overflow-x:hidden; }
+* { box-sizing: border-box; }
+.wrap { width:100%; max-width: 920px; margin: 0 auto; }
+.row { flex-wrap: wrap; }
+.row > * { max-width: 100%; }
+input { width:100%; }
+
+.primary.cta{
+  background: rgba(80,200,120,.18);
+  border-color: rgba(120,255,190,.35);
+  font-weight: 900;
+  letter-spacing: .02em;
+}
+.primary.cta:active{ transform: scale(.99); }
