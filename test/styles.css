@@ -118,7 +118,7 @@ input, select { min-height: 44px; }
 
 /* smaller checkbox row */
 .chkRow { display:flex; align-items:center; gap:10px; }
-.chkRow input[type="checkbox"] { width:18px; height:18px; transform: none; }
+.chkRow input[type="checkbox"] { width:10px; height:10px; transform: none; }
 
 
 
