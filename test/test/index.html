@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>StampCam PWA (test)</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" content="#111111">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <header class="bar">
+    <div class="title">StampCam PWA (test)</div>
+    <div class="right">
+      <span id="storageWarn" style="opacity:.85;font-size:12px;"></span>
+      <button id="btnExport">ZIP出力</button>
+      <button id="btnWipe" class="danger">全削除</button>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="panel">
+      <h2>案件情報</h2>
+      <div class="row">
+        <input id="projectName" placeholder="案件名（例：本社LAN更新）" />
+        <input id="roomName" placeholder="部屋名 / フロア名（例：3F 会議室）" />
+        <button id="btnSaveMeta">保存</button>
+      </div>
+      <div class="hint">※ファイル名に [案件名][フロア名] を付与します（自動保存）</div>
+    </section>
+
+    <section class="panel">
+      <div class="row space">
+        <h2>機器No選択（001〜199）</h2>
+        <div class="row">
+          <input id="noFilter" placeholder="絞り込み（例：12）" style="max-width:220px;" />
+          <button id="btnClearFilter">クリア</button>
+        </div>
+      </div>
+      <div class="hint">※ボタンを押すと「選択中の機器No」になり、未登録なら自動で機器として追加されます。</div>
+      <div id="noGrid" class="grid"></div>
+      <div class="row" style="margin-top:10px;">
+        <div style="opacity:.85;font-size:12px;">選択中：</div>
+        <div id="selectedNo" style="font-weight:700;"></div>
+        <div style="flex:1;"></div>
+        <input id="deviceType" placeholder="機器種別（任意）" />
+        <button id="btnUpdateType">種別を保存</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="row space">
+        <h2>機器一覧</h2>
+        <label class="row">
+          <input type="checkbox" id="onlyIncomplete">
+          <span>未完了のみ</span>
+        </label>
+      </div>
+      <div id="deviceList" class="list"></div>
+    </section>
+
+    <section class="panel">
+      <h2>撮影</h2>
+
+      <div class="row">
+        <select id="kind">
+          <option value="overview">全景</option>
+          <option value="lamp">ランプ</option>
+          <option value="port">ポート</option>
+          <option value="label">ラベル</option>
+          <option value="ipaddress">IPアドレス</option>
+        </select>
+
+        <select id="activeDevice"></select>
+
+        <button id="btnStart">カメラ開始</button>
+        <button id="btnShot">撮影</button>
+        <button id="btnStop">停止</button>
+      </div>
+
+      <div class="cam">
+        <video id="video" playsinline></video>
+        <canvas id="canvas" hidden></canvas>
+      </div>
+
+      <div class="row space">
+        <h3>撮影済み</h3>
+        <div id="shotMeta" class="meta"></div>
+      </div>
+      <div id="shots" class="shots"></div>
+    </section>
+  </main>
+
+  <!-- Preview Modal -->
+  <div id="preview" class="modal hidden">
+    <div class="modalBar">
+      <div id="previewTitle" class="modalTitle"></div>
+      <div class="modalBtns">
+        <button id="zoomOut">-</button>
+        <button id="zoomReset">等倍</button>
+        <button id="zoomIn">+</button>
+        <button id="closePreview" class="danger">閉じる</button>
+      </div>
+    </div>
+    <div class="modalBody">
+      <img id="previewImg" alt="">
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/dexie@4/dist/dexie.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
