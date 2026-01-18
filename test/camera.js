@@ -10,28 +10,41 @@ const KIND_LABEL = {
   label:"ラベル",
   ipaddress:"IPアドレス"
 };
-
 const REQUIRED_KINDS = ["overview","lamp","port","label"];
+
+function normalizeRoomName(s) {
+  return String(s || "").trim() || "（未設定）";
+}
+function formatDeviceIndex(n) {
+  return String(n).padStart(2, "0");
+}
+function makeRoomDeviceLabel(roomName, deviceIndex) {
+  const room = normalizeRoomName(roomName);
+  const idx = formatDeviceIndex(deviceIndex);
+  return `${room}_機器${idx}`;
+}
+
+function qparam(name) {
+  const url = new URL(location.href);
+  return url.searchParams.get(name) || "";
+}
 
 const el = {
   camTitle: document.getElementById("camTitle"),
   btnBack: document.getElementById("btnBack"),
-  btnDrawer: document.getElementById("btnDrawer"),
 
   video: document.getElementById("video"),
   canvas: document.getElementById("canvas"),
 
-  btnShot: document.getElementById("btnShot"),
   btnTorch: document.getElementById("btnTorch"),
   btnRes: document.getElementById("btnRes"),
-
   zoom: document.getElementById("zoom"),
   zoomVal: document.getElementById("zoomVal"),
 
-  kindRow: document.getElementById("kindRow"),
-
-  shots: document.getElementById("shots"),
-  shotMeta: document.getElementById("shotMeta"),
+  btnShutter: document.getElementById("btnShutter"),
+  kindStrip: document.getElementById("kindStrip"),
+  kindStatus: document.getElementById("kindStatus"),
+  btnDrawer: document.getElementById("btnDrawer"),
 
   drawer: document.getElementById("drawer"),
   btnCloseDrawer: document.getElementById("btnCloseDrawer"),
@@ -48,57 +61,53 @@ const el = {
   zoomReset: document.getElementById("zoomReset"),
 };
 
-let deviceNo = "";
+let deviceKey = "";
+let roomName = "";
+let deviceIndex = 0;
+
 let stream = null;
 let track = null;
 let torchOn = false;
+
 let use4k = true;
 let zoom = 1;
 
+let selectedKind = "overview";
+
 let previewUrl = null;
 let modalZoom = 1;
-
-function qparam(name) {
-  const url = new URL(location.href);
-  return url.searchParams.get(name) || "";
-}
 
 async function getMeta(key, fallback = "") {
   const v = await db.meta.get(key);
   return v?.value ?? fallback;
 }
-
 async function getProjectName() { return await getMeta("projectName",""); }
-async function getFloorName() { return await getMeta("floorName",""); }
 
-async function upsertDevice(no) {
-  const existing = await db.devices.where("deviceNo").equals(no).first();
+async function upsertDeviceByKey(key) {
   const updatedAt = Date.now();
-  const roomName = (await getFloorName()).trim();
+  const existing = await db.devices.get(key);
+
   if (existing) {
-    await db.devices.update(existing.id, { updatedAt, roomName });
-    return existing.id;
+    await db.devices.put({ ...existing, roomName, deviceIndex, updatedAt });
+    return;
   }
-  return await db.devices.add({
-    deviceNo: no,
-    deviceType: "",
+
+  await db.devices.put({
+    deviceKey: key,
     roomName,
+    deviceIndex,
     checked: false,
     updatedAt
   });
 }
 
-async function computeDoneKinds(no) {
-  const shots = await db.shots.where("deviceNo").equals(no).toArray();
-  return new Set(shots.map(s=>s.kind));
-}
-
-async function recomputeChecked(no) {
-  const done = await computeDoneKinds(no);
-  const ok = REQUIRED_KINDS.every(k=>done.has(k));
-  const dev = await db.devices.where("deviceNo").equals(no).first();
-  if (dev) await db.devices.update(dev.id, { checked: ok, updatedAt: Date.now() });
-  return ok;
+async function recomputeChecked(key) {
+  const shots = await db.shots.where("deviceKey").equals(key).toArray();
+  const done = new Set(shots.map(s=>s.kind));
+  const checked = REQUIRED_KINDS.every(k => done.has(k));
+  const dev = await db.devices.get(key);
+  if (dev) await db.devices.put({ ...dev, checked, updatedAt: Date.now() });
+  return checked;
 }
 
 async function makeThumbnail(blob, maxSide = 320, quality = 0.7) {
@@ -111,6 +120,7 @@ async function makeThumbnail(blob, maxSide = 320, quality = 0.7) {
   c.width = w; c.height = h;
   const ctx = c.getContext("2d", { alpha:false });
   ctx.drawImage(bmp, 0, 0, w, h);
+
   const thumb = await new Promise((resolve)=>c.toBlob(resolve,"image/jpeg",quality));
   bmp.close?.();
   if (!thumb) throw new Error("thumb gen failed");
@@ -119,6 +129,7 @@ async function makeThumbnail(blob, maxSide = 320, quality = 0.7) {
 
 async function startCamera() {
   if (stream) return;
+
   const constraints = {
     audio:false,
     video: {
@@ -165,7 +176,7 @@ async function applyTorch(on) {
 
 function applyZoom(val) {
   zoom = val;
-  el.zoomVal.textContent = `${zoom.toFixed(1)}x`;
+  if (el.zoomVal) el.zoomVal.textContent = `${zoom.toFixed(1)}x`;
 
   const caps = track?.getCapabilities?.();
   if (track && caps && caps.zoom) {
@@ -178,11 +189,15 @@ function applyZoom(val) {
   }
 }
 
+function openDrawer() { el.drawer?.classList.remove("hidden"); }
+function closeDrawer() { el.drawer?.classList.add("hidden"); }
+
 function openPreview(title, blob) {
   if (previewUrl) URL.revokeObjectURL(previewUrl);
   previewUrl = URL.createObjectURL(blob);
 
   modalZoom = 1;
+  el.previewImg.style.transformOrigin = "0 0";
   el.previewImg.style.transform = `scale(${modalZoom})`;
   el.previewImg.src = previewUrl;
   el.previewTitle.textContent = title;
@@ -203,8 +218,33 @@ function setModalZoom(next) {
   el.previewImg.style.transform = `scale(${modalZoom})`;
 }
 
-async function takeShot(kind) {
-  if (!deviceNo) return alert("機器Noがありません");
+async function renderKindStrip() {
+  if (!el.kindStrip) return;
+  el.kindStrip.innerHTML = "";
+
+  for (const k of KINDS) {
+    const b = document.createElement("button");
+    b.textContent = KIND_LABEL[k] || k;
+    if (k === selectedKind) b.classList.add("sel");
+    b.addEventListener("click", () => {
+      selectedKind = k;
+      renderKindStrip();
+      renderKindStatus();
+    });
+    el.kindStrip.appendChild(b);
+  }
+}
+
+async function renderKindStatus() {
+  if (!el.kindStatus) return;
+  const shots = await db.shots.where("deviceKey").equals(deviceKey).toArray();
+  const done = new Set(shots.map(s=>s.kind));
+  const must = REQUIRED_KINDS.map(k => `${KIND_LABEL[k]}${done.has(k) ? "✅" : "□"}`).join(" / ");
+  el.kindStatus.textContent = `選択:${KIND_LABEL[selectedKind]} / 必須:${must}`;
+}
+
+async function takeShot() {
+  if (!deviceKey) return alert("機器が未選択です");
   if (!stream) return alert("カメラ起動に失敗しています");
 
   const v = el.video;
@@ -222,8 +262,8 @@ async function takeShot(kind) {
   const { thumb, w:tw, h:th } = await makeThumbnail(blob);
 
   const shotId = await db.shots.add({
-    deviceNo,
-    kind,
+    deviceKey,
+    kind: selectedKind,
     createdAt: Date.now(),
     mime: blob.type,
     blob,
@@ -234,75 +274,22 @@ async function takeShot(kind) {
 
   await db.meta.put({ key: "lastShotId", value: String(shotId) });
 
-  await recomputeChecked(deviceNo);
-
-  await renderShots();
+  await recomputeChecked(deviceKey);
   await renderDrawer();
-}
-
-async function renderShots() {
-  el.shots.innerHTML = "";
-  const shots = await db.shots.where("deviceNo").equals(deviceNo).toArray();
-  shots.sort((a,b)=>b.createdAt-a.createdAt);
-
-  const done = await computeDoneKinds(deviceNo);
-  const must = REQUIRED_KINDS.map(k=>`${KIND_LABEL[k]}${done.has(k) ? "✅" : "□"}`).join(" / ");
-  el.shotMeta.textContent = `${must} / 枚数: ${shots.length}`;
-
-  for (const s of shots) {
-    const url = URL.createObjectURL(s.thumbBlob || s.blob);
-    const div = document.createElement("div");
-    div.className = "shot";
-    div.innerHTML = `
-      <img src="${url}" alt="">
-      <div class="cap">
-        <span>${KIND_LABEL[s.kind]}</span>
-        <div style="display:flex; gap:6px;">
-          <button data-open="${s.id}">確認</button>
-          <button data-del="${s.id}" class="danger">削除</button>
-        </div>
-      </div>
-    `;
-
-    div.querySelector(`[data-open="${s.id}"]`).addEventListener("click", async (ev) => {
-      ev.stopPropagation();
-      const shot = await db.shots.get(s.id);
-      if (!shot) return;
-      openPreview(`${deviceNo} / ${KIND_LABEL[shot.kind]} / ${new Date(shot.createdAt).toLocaleString()}`, shot.blob);
-    });
-
-    div.querySelector(`[data-del="${s.id}"]`).addEventListener("click", async (ev) => {
-      ev.stopPropagation();
-      URL.revokeObjectURL(url);
-      const shot = await db.shots.get(s.id);
-      if (!shot) return;
-      await db.shots.delete(s.id);
-      await recomputeChecked(deviceNo);
-
-      const lastId = (await db.meta.get("lastShotId"))?.value || "";
-      if (String(lastId) === String(s.id)) {
-        const left = await db.shots.where("deviceNo").equals(deviceNo).toArray();
-        left.sort((a,b)=>b.createdAt-a.createdAt);
-        await db.meta.put({ key:"lastShotId", value: left[0] ? String(left[0].id) : "" });
-      }
-
-      await renderShots();
-      await renderDrawer();
-    });
-
-    el.shots.appendChild(div);
-    setTimeout(()=>URL.revokeObjectURL(url), 30_000);
-  }
+  await renderKindStatus();
 }
 
 async function renderDrawer() {
   const lastId = (await db.meta.get("lastShotId"))?.value || "";
+  if (!el.lastInfo || !el.lastImg || !el.btnOpenLast) return;
+
   if (!lastId) {
     el.lastInfo.textContent = "直前の写真なし";
     el.lastImg.removeAttribute("src");
     el.btnOpenLast.disabled = true;
     return;
   }
+
   const shot = await db.shots.get(Number(lastId));
   if (!shot) {
     el.lastInfo.textContent = "直前の写真なし";
@@ -312,7 +299,9 @@ async function renderDrawer() {
   }
 
   el.btnOpenLast.disabled = false;
-  el.lastInfo.textContent = `${deviceNo} / ${KIND_LABEL[shot.kind]} / ${new Date(shot.createdAt).toLocaleString()}`;
+
+  const label = makeRoomDeviceLabel(roomName, deviceIndex);
+  el.lastInfo.textContent = `${label} / ${KIND_LABEL[shot.kind] || shot.kind} / ${new Date(shot.createdAt).toLocaleString()}`;
 
   const url = URL.createObjectURL(shot.thumbBlob || shot.blob);
   el.lastImg.src = url;
@@ -321,71 +310,68 @@ async function renderDrawer() {
   el.btnOpenLast.onclick = () => openPreview(el.lastInfo.textContent, shot.blob);
 }
 
-function openDrawer() { el.drawer.classList.remove("hidden"); }
-function closeDrawer() { el.drawer.classList.add("hidden"); }
-
-function buildKindButtons() {
-  el.kindRow.innerHTML = "";
-  for (const k of KINDS) {
-    const b = document.createElement("button");
-    b.textContent = KIND_LABEL[k] || k;
-    b.addEventListener("click", () => takeShot(k));
-    el.kindRow.appendChild(b);
-  }
-}
-
 async function init() {
-  deviceNo = qparam("deviceNo");
-  if (!deviceNo) {
-    alert("deviceNoがありません。");
+  deviceKey = qparam("deviceKey");
+  if (!deviceKey) {
+    alert("deviceKeyがありません。");
     location.href = "./index.html";
     return;
   }
 
-  await upsertDevice(deviceNo);
+  {
+    const [r, idx] = String(deviceKey).split("::");
+    roomName = normalizeRoomName(r);
+    deviceIndex = Number(idx);
+  }
+
+  await upsertDeviceByKey(deviceKey);
 
   const pj = (await getProjectName()).trim();
-  const fl = (await getFloorName()).trim();
-  el.camTitle.textContent = `撮影 ${deviceNo}  ${pj ? "["+pj+"]" : ""}${fl ? "["+fl+"]" : ""}`;
+  const label = makeRoomDeviceLabel(roomName, deviceIndex);
+  if (el.camTitle) el.camTitle.textContent = `撮影 ${label} ${pj ? "["+pj+"]" : ""}`;
 
-  buildKindButtons();
-
-  el.btnBack.addEventListener("click", async () => {
+  el.btnBack?.addEventListener("click", async () => {
     await stopCamera();
     location.href = "./index.html";
   });
 
-  el.btnDrawer.addEventListener("click", () => openDrawer());
-  el.btnCloseDrawer.addEventListener("click", () => closeDrawer());
+  el.btnDrawer?.addEventListener("click", () => openDrawer());
+  el.btnCloseDrawer?.addEventListener("click", () => closeDrawer());
 
-  el.closePreview.addEventListener("click", closePreview);
-  el.preview.addEventListener("click", (e) => { if (e.target === el.preview) closePreview(); });
-  el.zoomIn.addEventListener("click", () => setModalZoom(modalZoom * 1.25));
-  el.zoomOut.addEventListener("click", () => setModalZoom(modalZoom / 1.25));
-  el.zoomReset.addEventListener("click", () => setModalZoom(1));
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closePreview(); closeDrawer(); } });
+  el.closePreview?.addEventListener("click", closePreview);
+  el.preview?.addEventListener("click", (e) => { if (e.target === el.preview) closePreview(); });
+  el.zoomIn?.addEventListener("click", () => setModalZoom(modalZoom * 1.25));
+  el.zoomOut?.addEventListener("click", () => setModalZoom(modalZoom / 1.25));
+  el.zoomReset?.addEventListener("click", () => setModalZoom(1));
 
-  el.zoom.addEventListener("input", () => applyZoom(Number(el.zoom.value)));
-  el.zoom.value = String(zoom);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") { closePreview(); closeDrawer(); }
+  });
 
-  el.btnTorch.addEventListener("click", async () => {
+  el.zoom?.addEventListener("input", () => applyZoom(Number(el.zoom.value)));
+  if (el.zoom) el.zoom.value = String(zoom);
+
+  el.btnTorch?.addEventListener("click", async () => {
     torchOn = !torchOn;
     const ok = await applyTorch(torchOn);
     if (!ok) {
       torchOn = false;
       alert("この端末/ブラウザではライト制御に対応していません。");
     }
-    el.btnTorch.textContent = torchOn ? "ライトON" : "ライト";
+    if (el.btnTorch) el.btnTorch.textContent = torchOn ? "ライトON" : "ライト";
   });
 
-  el.btnRes.addEventListener("click", async () => {
+  el.btnRes?.addEventListener("click", async () => {
     use4k = !use4k;
-    el.btnRes.textContent = use4k ? "解像度 3840×2160" : "解像度 1280×720";
+    if (el.btnRes) el.btnRes.textContent = use4k ? "解像度 3840×2160" : "解像度 1280×720";
     await restartCamera();
   });
 
-  // 「撮影」ボタンはoverviewで撮影（種別ボタンも別途あり）
-  el.btnShot.addEventListener("click", () => takeShot("overview"));
+  el.btnShutter?.addEventListener("click", takeShot);
+
+  await renderKindStrip();
+  await renderDrawer();
+  await renderKindStatus();
 
   try {
     await startCamera();
@@ -393,9 +379,6 @@ async function init() {
     console.error(e);
     alert("カメラ起動に失敗。権限/HTTPS/設定を確認してください。");
   }
-
-  await renderShots();
-  await renderDrawer();
 }
 
 init();

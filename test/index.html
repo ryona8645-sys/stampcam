@@ -19,43 +19,61 @@
   </header>
 
   <main class="wrap">
+  <section class="panel">
+    <h2>案件情報</h2>
+    <div class="row">
+      <input id="projectName" placeholder="案件名" />
+      <input id="floorName" placeholder="部屋名（例：1F事務所 / 2F機械室）" />
+    </div>
+    <div class="hint">※部屋名は「部屋枠」とファイル名に使います（自動保存）</div>
+  </section>
 
-    <section class="panel">
-      <h2>案件情報</h2>
-      <div class="row">
-        <input id="projectName" placeholder="案件名" />
-        <input id="floorName" placeholder="フロア名 / 部屋名" />
+  <section class="panel">
+    <details id="devicePicker" open>
+      <summary class="summaryRow">
+        <span>機器選択</span>
+        <span id="activeDeviceLabel" class="pill"></span>
+      </summary>
+
+      <div class="hint" style="margin-top:8px;">
+        ※部屋名を入れてから、番号を押す（部屋が違えば同じ番号でも別機器）
       </div>
-      <div class="hint">※ファイル名に [案件名][フロア名] を付与します（自動保存）</div>
-    </section>
 
-    <section class="panel">
-      <h2>機器No選択（001〜199）</h2>
-      <div id="devicePad" class="pad"></div>
-      <div class="hint">※タップで機器Noを選択します（必要なら自動で機器を追加）</div>
-    </section>
+      <div id="roomList" class="roomList"></div>
+    </details>
 
-    <section class="panel">
-      <h2>機器追加</h2>
-      <div class="row">
-        <input id="deviceNo" placeholder="機器No (例: 001)" />
-        <input id="deviceType" placeholder="機器種別 (任意)" />
-        <button id="btnAdd">追加</button>
-      </div>
-      <div class="hint">※チェック/写真は自動保存（IndexedDB）</div>
-    </section>
+    <div class="row" style="margin-top:10px;">
+      <label class="row">
+        <input type="checkbox" id="onlyIncomplete">
+        <span>未完了のみ</span>
+      </label>
+    </div>
+  </section>
 
-    <section class="panel">
-      <div class="row space">
-        <h2>機器一覧</h2>
-        <label class="row">
-          <input type="checkbox" id="onlyIncomplete">
-          <span>未完了のみ</span>
-        </label>
-      </div>
-      <div id="deviceList" class="list"></div>
-    </section>
-  </main>
+  <section class="panel">
+    <div class="row space">
+      <h2>写真一覧</h2>
+      <button id="btnOpenCamera" class="primary">撮影へ</button>
+    </div>
+    <div id="photoMeta" class="meta"></div>
+    <div id="photoGrid" class="shots"></div>
+  </section>
+</main>
+
+<div id="preview" class="modal hidden">
+  <div class="modalBar">
+    <div id="previewTitle" class="modalTitle"></div>
+    <div class="modalBtns">
+      <button id="zoomOut">-</button>
+      <button id="zoomReset">等倍</button>
+      <button id="zoomIn">+</button>
+      <button id="closePreview" class="danger">閉じる</button>
+    </div>
+  </div>
+  <div class="modalBody">
+    <img id="previewImg" alt="">
+  </div>
+</div>
 <!-- ライブラリ（CDN）。厳密なオフラインにしたいならローカル配置に切り替える -->
   <script src="https://cdn.jsdelivr.net/npm/dexie@4/dist/dexie.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fflate@0.8.2/umd/index.js"></script>

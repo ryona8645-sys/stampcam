@@ -1,113 +1,253 @@
 import { openDb } from "./db.js";
-
 const db = openDb();
 
 const el = {
   projectName: document.getElementById("projectName"),
   floorName: document.getElementById("floorName"),
-  devicePad: document.getElementById("devicePad"),
 
-  deviceList: document.getElementById("deviceList"),
+  devicePicker: document.getElementById("devicePicker"),
+  roomList: document.getElementById("roomList"),
+  activeDeviceLabel: document.getElementById("activeDeviceLabel"),
   onlyIncomplete: document.getElementById("onlyIncomplete"),
 
   btnExport: document.getElementById("btnExport"),
   btnWipe: document.getElementById("btnWipe"),
+
+  btnOpenCamera: document.getElementById("btnOpenCamera"),
+  photoMeta: document.getElementById("photoMeta"),
+  photoGrid: document.getElementById("photoGrid"),
+
+  preview: document.getElementById("preview"),
+  previewImg: document.getElementById("previewImg"),
+  previewTitle: document.getElementById("previewTitle"),
+  closePreview: document.getElementById("closePreview"),
+  zoomIn: document.getElementById("zoomIn"),
+  zoomOut: document.getElementById("zoomOut"),
+  zoomReset: document.getElementById("zoomReset"),
 };
 
+const REQUIRED_KINDS = ["overview","lamp","port","label"];
+const KIND_LABEL = { overview:"全景", lamp:"ランプ", port:"ポート", label:"ラベル", ipaddress:"IPアドレス" };
+
+function normalizeRoomName(s) {
+  return String(s || "").trim() || "（未設定）";
+}
+function formatDeviceIndex(n) {
+  return String(n).padStart(2, "0");
+}
+function makeDeviceKey(roomName, deviceIndex) {
+  const room = normalizeRoomName(roomName);
+  const idx = formatDeviceIndex(deviceIndex);
+  return `${room}::${idx}`;
+}
+function makeRoomDeviceLabel(roomName, deviceIndex) {
+  const room = normalizeRoomName(roomName);
+  const idx = formatDeviceIndex(deviceIndex);
+  return `${room}_機器${idx}`;
+}
 function sanitizeFile(s) {
   return String(s).replace(/[\\/:*?"<>|\s]/g, "_");
 }
 
-async function getMeta(key, fallback = "") {
+async function getMeta(key, fallback="") {
   const v = await db.meta.get(key);
   return v?.value ?? fallback;
 }
 async function setMeta(key, value) {
   await db.meta.put({ key, value: String(value ?? "") });
 }
-
-async function getProjectName() { return await getMeta("projectName", ""); }
-async function getFloorName() { return await getMeta("floorName", ""); }
+async function getProjectName() { return await getMeta("projectName",""); }
+async function getRoomInput() { return normalizeRoomName(el.floorName?.value); }
+async function getActiveDeviceKey() { return await getMeta("activeDeviceKey",""); }
 async function loadOnlyIncomplete() { return (await getMeta("onlyIncomplete","0")) === "1"; }
 
-async function upsertDevice(deviceNo) {
-  const existing = await db.devices.where("deviceNo").equals(deviceNo).first();
+async function upsertDevice(roomName, deviceIndex) {
+  const room = normalizeRoomName(roomName);
+  const idx = Number(deviceIndex);
+  const deviceKey = makeDeviceKey(room, idx);
+
+  const existing = await db.devices.get(deviceKey);
   const updatedAt = Date.now();
-  const roomName = (await getFloorName()).trim();
+
   if (existing) {
-    await db.devices.update(existing.id, { updatedAt, roomName });
-    return existing.id;
+    await db.devices.put({ ...existing, roomName: room, deviceIndex: idx, updatedAt });
+    return deviceKey;
   }
-  return await db.devices.add({
-    deviceNo,
-    deviceType: "",
-    roomName,
+
+  await db.devices.put({
+    deviceKey,
+    roomName: room,
+    deviceIndex: idx,
     checked: false,
     updatedAt
   });
+  return deviceKey;
 }
 
-function buildDevicePad() {
-  if (!el.devicePad) return;
-  el.devicePad.innerHTML = "";
-  for (let i = 1; i <= 199; i++) {
-    const no = String(i).padStart(3, "0");
-    const b = document.createElement("button");
-    b.textContent = no;
-    b.addEventListener("click", async () => {
-      await upsertDevice(no);
-      await setMeta("activeDeviceNo", no);
-      location.href = `./camera.html?deviceNo=${encodeURIComponent(no)}`;
-    });
-    el.devicePad.appendChild(b);
-  }
+async function computeChecked(deviceKey) {
+  const shots = await db.shots.where("deviceKey").equals(deviceKey).toArray();
+  const done = new Set(shots.map(s=>s.kind));
+  return REQUIRED_KINDS.every(k => done.has(k));
 }
 
-async function renderDeviceList() {
-  if (!el.deviceList) return;
-  el.deviceList.innerHTML = "";
+let modalZoom = 1;
+function setModalZoom(next) {
+  modalZoom = Math.max(0.25, Math.min(6, next));
+  el.previewImg.style.transformOrigin = "0 0";
+  el.previewImg.style.transform = `scale(${modalZoom})`;
+}
 
+async function openPreview(title, blob) {
+  const url = URL.createObjectURL(blob);
+  el.previewImg.src = url;
+  el.previewTitle.textContent = title;
+  el.preview.classList.remove("hidden");
+  setModalZoom(1);
+  setTimeout(()=>URL.revokeObjectURL(url), 60_000);
+}
+
+async function renderRooms() {
   const onlyInc = await loadOnlyIncomplete();
   if (el.onlyIncomplete) el.onlyIncomplete.checked = onlyInc;
 
-  let devices = await db.devices.orderBy("deviceNo").toArray();
-  if (onlyInc) devices = devices.filter(d => !d.checked);
+  const devicesAll = await db.devices.toArray();
 
   const groups = new Map();
-  for (const d of devices) {
-    const room = (d.roomName || "（未設定）").trim() || "（未設定）";
+  for (const d of devicesAll) {
+    const room = normalizeRoomName(d.roomName);
     if (!groups.has(room)) groups.set(room, []);
     groups.get(room).push(d);
   }
 
+  const currentRoom = await getRoomInput();
+  if (currentRoom && !groups.has(currentRoom)) groups.set(currentRoom, []);
+
   const rooms = Array.from(groups.keys()).sort((a,b)=>a.localeCompare(b,"ja"));
+  const activeKey = await getActiveDeviceKey();
+
+  el.roomList.innerHTML = "";
 
   for (const room of rooms) {
-    const header = document.createElement("div");
-    header.style.marginTop = "10px";
-    header.style.fontWeight = "700";
-    header.textContent = room;
-    el.deviceList.appendChild(header);
+    const card = document.createElement("div");
+    card.className = "roomCard";
 
-    const list = document.createElement("div");
-    list.className = "list";
-    list.style.marginTop = "6px";
+    const head = document.createElement("div");
+    head.className = "roomHead";
+    head.innerHTML = `
+      <div class="roomTitle">${room}</div>
+      <button data-add class="primary">＋追加</button>
+    `;
 
-    const items = groups.get(room).slice().sort((a,b)=>a.deviceNo.localeCompare(b.deviceNo));
+    const btnBox = document.createElement("div");
+    btnBox.className = "roomBtns";
+
+    const items = groups.get(room)
+      .slice()
+      .sort((a,b)=>Number(a.deviceIndex)-Number(b.deviceIndex));
+
     for (const d of items) {
-      const item = document.createElement("div");
-      item.className = "item";
-      item.innerHTML = `
-        <div><b>${d.deviceNo}</b></div>
-        <div style="opacity:.9">${d.checked ? "✅" : "□"}</div>
-      `;
-      item.addEventListener("click", async () => {
-        await setMeta("activeDeviceNo", d.deviceNo);
-        location.href = `./camera.html?deviceNo=${encodeURIComponent(d.deviceNo)}`;
+      if (onlyInc && d.checked) continue;
+
+      const b = document.createElement("button");
+      b.textContent = formatDeviceIndex(d.deviceIndex);
+      const key = d.deviceKey;
+
+      if (key === activeKey) b.classList.add("sel");
+      if (d.checked) b.classList.add("ok");
+
+      b.addEventListener("click", async () => {
+        await setMeta("activeDeviceKey", key);
+        await render();
+        if (el.devicePicker) el.devicePicker.open = false;
       });
-      list.appendChild(item);
+      btnBox.appendChild(b);
     }
-    el.deviceList.appendChild(list);
+
+    head.querySelector("[data-add]").addEventListener("click", async () => {
+      const used = new Set(items.map(x=>Number(x.deviceIndex)));
+      let n = 1;
+      while (used.has(n) && n <= 199) n++;
+      if (n > 199) return alert("199まで埋まっています");
+
+      const key = await upsertDevice(room, n);
+      await setMeta("activeDeviceKey", key);
+      await render();
+      if (el.devicePicker) el.devicePicker.open = false;
+    });
+
+    card.appendChild(head);
+    card.appendChild(btnBox);
+    el.roomList.appendChild(card);
+  }
+
+  const ak = await getActiveDeviceKey();
+  if (el.activeDeviceLabel) {
+    if (!ak) el.activeDeviceLabel.textContent = "未選択";
+    else {
+      const [r, idx] = ak.split("::");
+      el.activeDeviceLabel.textContent = makeRoomDeviceLabel(r, Number(idx));
+    }
+  }
+}
+
+async function renderPhotos() {
+  const deviceKey = await getActiveDeviceKey();
+  el.photoGrid.innerHTML = "";
+
+  if (!deviceKey) {
+    el.photoMeta.textContent = "機器を選択してください。";
+    return;
+  }
+
+  const [r, idx] = deviceKey.split("::");
+  const label = makeRoomDeviceLabel(r, Number(idx));
+
+  const shots = await db.shots.where("deviceKey").equals(deviceKey).toArray();
+  shots.sort((a,b)=>b.createdAt-a.createdAt);
+
+  const done = new Set(shots.map(s=>s.kind));
+  const must = REQUIRED_KINDS.map(k=>`${KIND_LABEL[k]}${done.has(k) ? "✅" : "□"}`).join(" / ");
+  el.photoMeta.textContent = `${label} / ${must} / 枚数:${shots.length}`;
+
+  for (const s of shots) {
+    const url = URL.createObjectURL(s.thumbBlob || s.blob);
+
+    const div = document.createElement("div");
+    div.className = "shot";
+    div.innerHTML = `
+      <img src="${url}" alt="">
+      <div class="cap">
+        <span>${KIND_LABEL[s.kind] || s.kind}</span>
+        <div style="display:flex; gap:6px;">
+          <button data-open>確認</button>
+          <button data-del class="danger">削除</button>
+        </div>
+      </div>
+    `;
+
+    div.querySelector("[data-open]").addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      const shot = await db.shots.get(s.id);
+      if (!shot) return;
+      await openPreview(`${label} / ${KIND_LABEL[shot.kind] || shot.kind} / ${new Date(shot.createdAt).toLocaleString()}`, shot.blob);
+    });
+
+    div.querySelector("[data-del]").addEventListener("click", async (ev) => {
+      ev.stopPropagation();
+      const ok = confirm("この写真を削除します。よろしいですか？");
+      if (!ok) return;
+      URL.revokeObjectURL(url);
+      await db.shots.delete(s.id);
+
+      const checked = await computeChecked(deviceKey);
+      const dev = await db.devices.get(deviceKey);
+      if (dev) await db.devices.put({ ...dev, checked, updatedAt: Date.now() });
+
+      await render();
+    });
+
+    el.photoGrid.appendChild(div);
+    setTimeout(()=>URL.revokeObjectURL(url), 30_000);
   }
 }
 
@@ -117,20 +257,27 @@ function nowIsoSafe() {
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
 }
 
+function csvEscape(s) {
+  const t = String(s);
+  if (/[,"\n]/.test(t)) return `"${t.replace(/"/g, '""')}"`;
+  return t;
+}
+
 async function exportZip() {
   const ts = nowIsoSafe();
   const zipName = `stampcam_${ts}.zip`;
 
-  const devices = await db.devices.orderBy("deviceNo").toArray();
+  const devices = await db.devices.toArray();
   const shots = await db.shots.toArray();
 
   const devicesCsv = [
-    "deviceNo,roomName,checked,updatedAt",
+    "deviceKey,roomName,deviceIndex,checked,updatedAt",
     ...devices.map(d => [
-      d.deviceNo,
+      csvEscape(d.deviceKey),
       csvEscape(d.roomName || ""),
+      String(d.deviceIndex ?? ""),
       d.checked ? "1" : "0",
-      new Date(d.updatedAt).toISOString()
+      new Date(d.updatedAt || Date.now()).toISOString()
     ].join(","))
   ].join("\n");
 
@@ -138,16 +285,18 @@ async function exportZip() {
   const files = {};
   files["devices.csv"] = strToU8(devicesCsv);
 
+  const pj = sanitizeFile(await getProjectName());
+
   for (const s of shots) {
-    const pj = sanitizeFile(await getProjectName());
-    const fl = sanitizeFile(await getFloorName());
+    const [r, idx] = String(s.deviceKey).split("::");
+    const roomDevice = sanitizeFile(makeRoomDeviceLabel(r, Number(idx)));
 
     const tsShot = new Date(s.createdAt);
     const pad2 = (n) => String(n).padStart(2, "0");
     const shotTime = `${tsShot.getFullYear()}-${pad2(tsShot.getMonth()+1)}-${pad2(tsShot.getDate())}_${pad2(tsShot.getHours())}-${pad2(tsShot.getMinutes())}-${pad2(tsShot.getSeconds())}`;
 
-    const base = `${pj}${fl}${sanitizeFile(s.deviceNo)}${sanitizeFile(s.kind)}${shotTime}`;
-    const fname = `photos/${sanitizeFile(s.deviceNo)}/${base}.jpg`;
+    const base = `${pj}${roomDevice}${sanitizeFile(s.kind)}${shotTime}`;
+    const fname = `photos/${roomDevice}/${base}.jpg`;
 
     const buf = new Uint8Array(await s.blob.arrayBuffer());
     files[fname] = buf;
@@ -163,12 +312,6 @@ async function exportZip() {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
-}
-
-function csvEscape(s) {
-  const t = String(s);
-  if (/[,"\n]/.test(t)) return `"${t.replace(/"/g, '""')}"`;
-  return t;
 }
 
 async function wipeAll() {
@@ -214,35 +357,46 @@ async function checkStorage() {
 
 async function render() {
   if (el.projectName) el.projectName.value = await getProjectName();
-  if (el.floorName) el.floorName.value = await getFloorName();
+  if (el.floorName) el.floorName.value = String(await getMeta("floorName",""));
 
-  await renderDeviceList();
+  await renderRooms();
+  await renderPhotos();
   await checkStorage();
 }
 
 async function init() {
-  if (el.projectName) {
-    el.projectName.addEventListener("input", async () => {
-      await setMeta("projectName", el.projectName.value.trim());
-    });
-  }
-  if (el.floorName) {
-    el.floorName.addEventListener("input", async () => {
-      await setMeta("floorName", el.floorName.value.trim());
-      await renderDeviceList();
-    });
-  }
-  if (el.onlyIncomplete) {
-    el.onlyIncomplete.addEventListener("change", async () => {
-      await setMeta("onlyIncomplete", el.onlyIncomplete.checked ? "1" : "0");
-      await renderDeviceList();
-    });
-  }
+  el.projectName?.addEventListener("input", async () => {
+    await setMeta("projectName", el.projectName.value.trim());
+  });
 
-  buildDevicePad();
+  el.floorName?.addEventListener("input", async () => {
+    await setMeta("floorName", el.floorName.value.trim());
+    await renderRooms();
+  });
+
+  el.onlyIncomplete?.addEventListener("change", async () => {
+    await setMeta("onlyIncomplete", el.onlyIncomplete.checked ? "1" : "0");
+    await renderRooms();
+  });
+
+  el.btnOpenCamera?.addEventListener("click", async () => {
+    const key = await getActiveDeviceKey();
+    if (!key) return alert("先に機器を選択してください。");
+    location.href = `./camera.html?deviceKey=${encodeURIComponent(key)}`;
+  });
 
   el.btnExport?.addEventListener("click", exportZip);
   el.btnWipe?.addEventListener("click", wipeAll);
+
+  el.closePreview?.addEventListener("click", () => el.preview.classList.add("hidden"));
+  el.preview?.addEventListener("click", (e) => { if (e.target === el.preview) el.preview.classList.add("hidden"); });
+  el.zoomIn?.addEventListener("click", () => setModalZoom(modalZoom * 1.25));
+  el.zoomOut?.addEventListener("click", () => setModalZoom(modalZoom / 1.25));
+  el.zoomReset?.addEventListener("click", () => setModalZoom(1));
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") el.preview.classList.add("hidden");
+  });
 
   await render();
 }

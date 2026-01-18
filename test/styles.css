@@ -62,3 +62,51 @@ video { width:100%; max-height:420px; background:#000; }
 .drawerTitle { font-weight:700; }
 .drawerBody { padding:12px; overflow:auto; }
 .drawerImg { width:100%; height:auto; border-radius:12px; display:block; border:1px solid #2a2a2a; background:#000; }
+
+
+/* mobile-first tweaks */
+.wrap { padding-bottom: 92px; } /* 下部操作分の余白 */
+button { min-height: 44px; }   /* 親指操作 */
+input, select { min-height: 44px; }
+
+.summaryRow { display:flex; justify-content:space-between; align-items:center; gap:10px; cursor:pointer; }
+.pill { padding:4px 10px; border:1px solid #333; border-radius:999px; font-size:12px; opacity:.9; }
+
+.roomList { display:grid; gap:12px; margin-top:12px; }
+.roomCard { border:1px solid #2a2a2a; border-radius:14px; padding:10px; background:#101010; }
+.roomHead { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+.roomTitle { font-weight:800; }
+.roomBtns { margin-top:10px; display:grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap:8px; }
+.roomBtns button { padding:12px 0; font-weight:800; border-radius:14px; }
+.roomBtns button.sel { outline:2px solid #e6e6e6; }
+.roomBtns button.ok { border-color:#1f5a2a; }
+
+.primary { border-color:#2a5a2a; background:#142a14; }
+
+/* photo grid: bigger thumbs on phone */
+.shots { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+
+/* camera UI additions */
+.camFixedBar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  background: rgba(20,20,20,.92);
+  border-top: 1px solid #2a2a2a;
+  display:flex;
+  justify-content:center;
+  gap:14px;
+  z-index: 20;
+}
+
+.shutter {
+  width: 74px; height: 74px;
+  border-radius: 999px;
+  border: 6px solid #fff;
+  background: transparent;
+}
+.shutter:active { transform: scale(0.98); }
+
+.kindStrip { display:flex; gap:8px; flex-wrap:wrap; justify-content:center; }
+.kindStrip button { min-height:40px; padding:8px 10px; border-radius:999px; }
+.kindStrip button.sel { outline:2px solid #e6e6e6; }

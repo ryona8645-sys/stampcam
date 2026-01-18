@@ -2,13 +2,13 @@
 export function openDb() {
   const db = new Dexie("stampcam_test_v1");
 
-  // v3: devicesに roomName を追加（既存データはそのまま）
-  db.version(3).stores({
-    devices: "++id, deviceNo, updatedAt, checked, roomName",
-    shots: "++id, deviceNo, kind, createdAt",
+  // v4: deviceKey (roomName + deviceIndex) に統一
+  db.version(4).stores({
+    devices: "deviceKey, roomName, deviceIndex, checked, updatedAt",
+    shots: "++id, deviceKey, kind, createdAt",
     meta: "key"
   }).upgrade(async () => {
-    // 旧データの移行は不要（roomNameは未設定扱い）
+    // 旧データ移行はしない（必要なら全削除）
   });
 
   return db;
