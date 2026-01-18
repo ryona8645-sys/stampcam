@@ -35,8 +35,23 @@
       <div class="hint">※タップで機器Noを選択します（必要なら自動で機器を追加）</div>
     </section>
 
+
     <section class="panel">
-      <h2>機器追加</h2>
+      <h2>通し番号（CSV用）</h2>
+      <div class="row">
+        <input id="startSerial" placeholder="通し番号開始 (例: 1)" />
+        <button id="btnAssignSerial">通し番号を自動割当</button>
+      </div>
+      <div style="margin-top:10px;">
+        <textarea id="roomOrder" rows="4" style="width:100%; padding:10px; border-radius:10px; border:1px solid #333; background:#0f0f0f; color:#eee;"
+          placeholder="部屋順（1行1部屋名）&#10;例:&#10;2F機械室&#10;1F事務所&#10;3F機械室"></textarea>
+      </div>
+      <div class="hint">※部屋順を指定すると、その順で 1,2,3... と通し番号を割り当てます。端末が複数ある場合は、最後にPC側でCSVを統合して通し番号を付ける運用が現実的です。</div>
+    </section>
+
+
+    <section class="panel">
+      <h2>機器追加</h2
       <div class="row">
         <input id="deviceNo" placeholder="機器No (例: 001)" />
         <input id="deviceType" placeholder="機器種別 (任意)" />
