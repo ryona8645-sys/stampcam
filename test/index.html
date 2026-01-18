@@ -26,7 +26,7 @@
       <input id="floorName" placeholder="部屋名（例：1F事務所 / 2F機械室）" />
       <button id="btnAddRoom" class="primary">追加</button>
     </div>
-    <div class="hint">※案件名・部屋名を入力 →「追加」で部屋を登録 → 機器Noを選択 → 機器を選択して撮影</div>
+    <div class="hint">※(1) 部屋を追加 → (2) 部屋選択で「選択」→ (3) 機器No選択(001-199) → (4) 部屋内の機器番号を選択 → (5) 撮影へ</div>
   </section>
 
   <section class="panel">
@@ -61,6 +61,7 @@
       <h2>写真一覧</h2>
       <button id="btnOpenCamera" class="primary cta">撮影へ</button>
     </div>
+    <div id="activeDeviceInfo" class="meta" style="font-weight:900;"></div>
     <div id="photoMeta" class="meta"></div>
     <div id="photoGrid" class="shots"></div>
   </section>

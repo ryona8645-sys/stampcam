@@ -335,3 +335,22 @@ input { width:100%; }
   letter-spacing: .02em;
 }
 .primary.cta:active{ transform: scale(.99); }
+
+
+
+/* ===== Main UI v10: selection clarity ===== */
+.sectionTitleRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.badge{
+  padding:4px 10px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.22);
+  background: rgba(0,0,0,.25);
+  font-size:12px;
+  white-space:nowrap;
+  opacity:.9;
+}
+.roomCard.active { outline: 2px solid rgba(255,255,255,.85); }
+.roomCard .roomTitleRow{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.roomCard .roomTitleRow .badge{ margin-left:auto; }
+.roomBtns button.sel{ outline:2px solid rgba(255,255,255,.9); }
+.devicePad.disabled{ opacity:.45; pointer-events:none; filter: grayscale(0.2); }
