@@ -455,3 +455,48 @@ input { width:100%; }
   font-variant-numeric: tabular-nums;
 }
 .recentBtns button.sel{ outline:2px solid rgba(255,255,255,.9); }
+
+/* ===== Room grid (v12-4) ===== */
+.addedRow{ display:flex; flex-direction:column; gap:8px; }
+.chipRow{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.chipRow button{
+  padding:10px 12px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.14);
+  background: rgba(0,0,0,.20);
+  color:#fff;
+  font-weight:900;
+  font-variant-numeric: tabular-nums;
+}
+.chipRow button.sel{ outline:2px solid rgba(255,255,255,.9); }
+.addGridScroll{
+  max-height: 260px;
+  overflow:auto;
+  border-radius:16px;
+  border:1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.12);
+  padding:10px;
+}
+.deviceGrid{
+  display:grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap:8px;
+}
+@media (min-width: 520px){
+  .deviceGrid{ grid-template-columns: repeat(10, 1fr); }
+}
+.deviceGrid button{
+  min-height:44px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.18);
+  color:#fff;
+  font-weight:900;
+  font-size:13px;
+  font-variant-numeric: tabular-nums;
+}
+.deviceGrid button:active{ transform: scale(.99); }

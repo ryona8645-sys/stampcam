@@ -12,7 +12,7 @@
   <div class="wrap">
     <header class="topbar">
       <div>
-        <div class="topTitle" id="roomTitle">部屋</div>
+        <div style="display:flex;align-items:baseline;gap:10px;"><div class="topTitle" id="roomTitle">部屋</div><span class="badge">v12.4</span></div>
         <div class="topSub" id="roomSub"></div>
       </div>
       <div class="topActions">
@@ -27,31 +27,25 @@
       </div>
 
       <div class="row" style="margin-top:10px;">
-        <button id="btnFree" class="primary" style="flex:1;">機器番号なし</button>
+        <button id="btnFree" class="" style="flex:1;">機器番号なし</button>
         <button id="btnOpenCamera" class="primary cta" style="flex:1;">撮影へ</button>
       </div>
 
+      <div class="meta" style="margin-top:10px;">① 番号を追加 → ② 追加済みから選択 → ③ 撮影へ</div>
+
+      <div class="addedRow" style="margin-top:10px;">
+        <div class="keypadLabel">追加済み</div>
+        <div id="addedDevices" class="chipRow"></div>
+      </div>
+
       <details id="deviceNoPicker" style="margin-top:10px;">
-        <summary>機器No（001〜199）を入力</summary>
-
-        <div class="keypadWrap" style="margin-top:10px;">
-          <div class="keypadDisplayRow">
-            <div class="keypadLabel">機器No</div>
-            <div id="deviceInput" class="keypadDisplay">---</div>
-            <button id="btnKeyBack" class="keySmall">⌫</button>
-            <button id="btnKeyClear" class="keySmall">CLR</button>
-            <button id="btnKeyOk" class="primary cta keyOk">決定</button>
+        <summary>機器Noを追加（001〜199）</summary>
+        <div class="addGridWrap" style="margin-top:10px;">
+          <div class="addGridScroll">
+            <div id="deviceGrid" class="deviceGrid"></div>
           </div>
-
-          <div class="keypadGrid" id="keypadGrid"></div>
-
           <div class="meta" style="margin-top:10px;">
-            ※3桁入力して「決定」。範囲外は弾きます。
-          </div>
-
-          <div class="recentRow" style="margin-top:10px;">
-            <div class="keypadLabel">最近</div>
-            <div id="recentDevices" class="recentBtns"></div>
+            ※押すと追加＋そのまま選択します
           </div>
         </div>
       </details>

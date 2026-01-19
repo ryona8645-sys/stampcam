@@ -29,12 +29,8 @@ const el = {
   btnFree: document.getElementById("btnFree"),
   btnOpenCamera: document.getElementById("btnOpenCamera"),
   deviceNoPicker: document.getElementById("deviceNoPicker"),
-  deviceInput: document.getElementById("deviceInput"),
-  btnKeyBack: document.getElementById("btnKeyBack"),
-  btnKeyClear: document.getElementById("btnKeyClear"),
-  btnKeyOk: document.getElementById("btnKeyOk"),
-  keypadGrid: document.getElementById("keypadGrid"),
-  recentDevices: document.getElementById("recentDevices"),
+  addedDevices: document.getElementById("addedDevices"),
+  deviceGrid: document.getElementById("deviceGrid"),
   activeDeviceBadge: document.getElementById("activeDeviceBadge"),
 
   shotCount: document.getElementById("shotCount"),
@@ -54,8 +50,6 @@ const el = {
 let roomName = "";
 let projectName = "";
 let activeDeviceKey = "";
-let inputDigits = "";
-let recentList = [];
 
 async function getMeta(key, fallback=""){
   const v = await db.meta.get(key);
@@ -73,6 +67,56 @@ async function upsertDeviceByKey(key, deviceIndex){
     await db.devices.put({ ...existing, roomName, deviceIndex, updatedAt });
     return;
   }
+
+
+async function getRoomDevices(){
+  const devs = await db.devices.where("roomName").equals(roomName).toArray();
+  devs.sort((a,b)=>Number(a.deviceIndex)-Number(b.deviceIndex));
+  return devs;
+}
+
+async function setActiveByIndex(idx){
+  const key = makeDeviceKey(roomName, idx);
+  await upsertDeviceByKey(key, idx);
+  await setMeta("activeDeviceKey", key);
+  setActiveDevice(key);
+  await renderAdded();
+  await renderPhotos();
+  el.photoGrid.scrollIntoView({ behavior:"smooth", block:"start" });
+}
+
+async function renderAdded(){
+  const devs = await getRoomDevices();
+  const indices = new Set(devs.map(d=>Number(d.deviceIndex)));
+  indices.add(0); // always show FREE chip
+  const list = Array.from(indices).sort((a,b)=>a-b);
+
+  el.addedDevices.innerHTML = "";
+  for (const idx of list){
+    const b = document.createElement("button");
+    b.textContent = (idx === 0) ? "番号なし" : formatDeviceIndex(idx);
+    const key = makeDeviceKey(roomName, idx);
+    if (key === activeDeviceKey) b.classList.add("sel");
+    b.addEventListener("click", async ()=>{ await setActiveByIndex(idx); });
+    el.addedDevices.appendChild(b);
+  }
+}
+
+async function renderAddGrid(){
+  el.deviceGrid.innerHTML = "";
+  for (let i=1; i<=199; i++){
+    const b = document.createElement("button");
+    b.textContent = formatDeviceIndex(i);
+    b.addEventListener("click", async ()=>{
+      await setActiveByIndex(i);
+      el.deviceNoPicker.open = false;
+  await renderAddGrid();
+  await renderAdded();
+    });
+    el.deviceGrid.appendChild(b);
+  }
+}
+
   await db.devices.put({ deviceKey:key, roomName, deviceIndex, checked:false, updatedAt });
 }
 async function recomputeChecked(key){
@@ -119,81 +163,6 @@ function setModalZoom(next){
 }
 
 
-async function getRoomRecentKey(room){
-  return `recentDevices::${room}`;
-}
-async function loadRecent(){
-  const key = await getRoomRecentKey(roomName);
-  const raw = await getMeta(key, "[]");
-  try { recentList = JSON.parse(raw) || []; } catch { recentList = []; }
-  // keep only 3-digit strings
-  recentList = recentList.filter(x => /^[0-9]{3}$/.test(String(x)));
-  recentList = Array.from(new Set(recentList)).slice(0, 8);
-}
-async function saveRecent(){
-  const key = await getRoomRecentKey(roomName);
-  await setMeta(key, JSON.stringify(recentList.slice(0,8)));
-}
-function updateInputDisplay(){
-  const s = inputDigits.padEnd(3, "-").slice(0,3);
-  el.deviceInput.textContent = s;
-}
-function pushDigit(d){
-  if (inputDigits.length >= 3) return;
-  inputDigits += String(d);
-  updateInputDisplay();
-}
-function backspace(){
-  inputDigits = inputDigits.slice(0, -1);
-  updateInputDisplay();
-}
-function clearInput(){
-  inputDigits = "";
-  updateInputDisplay();
-}
-function parseInput(){
-  if (inputDigits.length !== 3) return null;
-  const n = Number(inputDigits);
-  if (!Number.isFinite(n)) return null;
-  if (n < 1 || n > 199) return null;
-  return n;
-}
-async function commitDeviceIndex(n){
-  const key = makeDeviceKey(roomName, n);
-  await upsertDeviceByKey(key, n);
-  await setMeta("activeDeviceKey", key);
-  setActiveDevice(key);
-  // recent update (most recent first)
-  const s = formatDeviceIndex(n);
-  recentList = [s, ...recentList.filter(x => x !== s)].slice(0,8);
-  await saveRecent();
-  await renderRecent();
-  await renderPhotos();
-  el.photoGrid.scrollIntoView({ behavior:"smooth", block:"start" });
-}
-async function renderRecent(){
-  if (!el.recentDevices) return;
-  el.recentDevices.innerHTML = "";
-  for (const s of recentList){
-    const b = document.createElement("button");
-    b.textContent = s;
-    const key = makeDeviceKey(roomName, Number(s));
-    if (key === activeDeviceKey) b.classList.add("sel");
-    b.addEventListener("click", async ()=>{
-      await commitDeviceIndex(Number(s));
-    });
-    el.recentDevices.appendChild(b);
-  }
-}
-function renderKeypad(){
-  const nums = ["1","2","3","4","5","6","7","8","9","0"];
-  el.keypadGrid.innerHTML = "";
-  for (const n of nums){
-    const b = document.createElement("button");
-    b.textContent = n;
-    b.addEventListener("click", ()=>pushDigit(n));
-    el.keypadGrid.appendChild(b);
-  }
 }
 
 
@@ -246,7 +215,8 @@ function goCamera(){
     return;
   }
   const free = String(activeDeviceKey).endsWith("::000") ? "&free=1" : "";
-  location.href = `./camera.html?deviceKey=${encodeURIComponent(activeDeviceKey)}${free}`;
+  const ret = `./room.html?room=${encodeURIComponent(roomName)}`;
+  location.href = `./camera.html?deviceKey=${encodeURIComponent(activeDeviceKey)}${free}&return=${encodeURIComponent(ret)}`;
 }
 
 async function init(){
@@ -263,28 +233,12 @@ async function init(){
 
   el.btnBack.addEventListener("click", ()=>location.href="./index.html");
 
-  el.btnFree.addEventListener("click", async ()=>{
-    const key = makeDeviceKey(roomName, 0);
-    await upsertDeviceByKey(key, 0);
-    await setMeta("activeDeviceKey", key);
-    setActiveDevice(key);
-    await renderPhotos();
-    el.photoGrid.scrollIntoView({ behavior:"smooth", block:"start" });
+    el.btnFree.addEventListener("click", async ()=>{ await setActiveByIndex(0); });
   });
 
-  el.btnOpenCamera.addEventListener("click", goCamera);
-
-  // keypad
-  renderKeypad();
-  updateInputDisplay();
-  el.btnKeyBack?.addEventListener("click", backspace);
-  el.btnKeyClear?.addEventListener("click", clearInput);
-  el.btnKeyOk?.addEventListener("click", async ()=>{
-    const n = parseInput();
-    if (n === null){ alert("機器Noは001〜199の3桁で入力してください。"); return; }
-    await commitDeviceIndex(n);
-    clearInput();
-    el.deviceNoPicker.open = false;
+  el.btnOpenCamera.addEventListener("click", goCamera);  el.deviceNoPicker.open = false;
+  await renderAddGrid();
+  await renderAdded();
   await loadRecent();
   await renderRecent();
   });
@@ -310,6 +264,8 @@ async function init(){
 
 
   el.deviceNoPicker.open = false;
+  await renderAddGrid();
+  await renderAdded();
   await loadRecent();
   await renderRecent();
 

@@ -1,3 +1,4 @@
+const CACHE_NAME = "stampcam-v12.4";
 // sw.js
 const CACHE = "stampcam-test-shell-v1";
 const ASSETS = [

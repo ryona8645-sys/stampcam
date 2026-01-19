@@ -7,9 +7,7 @@ const el = {
   projectName: document.getElementById("projectName"),
   floorName: document.getElementById("floorName"),
   btnAddRoom: document.getElementById("btnAddRoom"),
-  roomList: document.getElementById("roomList"),
-  onlyIncomplete: document.getElementById("onlyIncomplete"),
-};
+  roomList: document.getElementById("roomList"),};
 
 async function getMeta(key, fallback=""){
   const v = await db.meta.get(key);
@@ -30,18 +28,9 @@ async function setRooms(arr){
   await db.meta.put({ key:"rooms", value: JSON.stringify(uniq) });
 }
 
-async function loadOnlyIncomplete(){
-  return (await getMeta("onlyIncomplete","0")) === "1";
-}
-async function saveOnlyIncomplete(v){
-  await setMeta("onlyIncomplete", v ? "1" : "0");
-}
 
 async function renderRooms(){
   const rooms = await getRooms();
-  const onlyInc = await loadOnlyIncomplete();
-  if (el.onlyIncomplete) el.onlyIncomplete.checked = onlyInc;
-
   const devicesAll = await db.devices.toArray();
 
   el.roomList.innerHTML = "";
@@ -53,7 +42,6 @@ async function renderRooms(){
     const devs = devicesAll.filter(d=>normalizeRoomName(d.roomName)===room);
     const total = devs.length;
     const done = devs.filter(d=>d.checked).length;
-    const remain = Math.max(0, total - done);
 
     const head = document.createElement("div");
     head.className = "roomHead";
@@ -107,10 +95,6 @@ async function renderRooms(){
     });
 
     card.appendChild(head);
-
-    if (onlyInc && remain == 0 && total > 0){
-      continue;
-    }
     el.roomList.appendChild(card);
   }
 }
@@ -146,11 +130,6 @@ async function init(){
     const rooms = await getRooms();
     if (!rooms.includes(room)) rooms.push(room);
     await setRooms(rooms);
-    await renderRooms();
-  });
-
-  el.onlyIncomplete?.addEventListener("change", async ()=>{
-    await saveOnlyIncomplete(!!el.onlyIncomplete.checked);
     await renderRooms();
   });
 
