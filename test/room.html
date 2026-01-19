@@ -12,7 +12,7 @@
   <div class="wrap">
     <header class="topbar">
       <div>
-        <div style="display:flex;align-items:baseline;gap:10px;"><div class="topTitle" id="roomTitle">部屋</div><span class="badge">v12.4</span></div>
+        <div class="topTitle" id="roomTitle">部屋</div>
         <div class="topSub" id="roomSub"></div>
       </div>
       <div class="topActions">
@@ -27,25 +27,13 @@
       </div>
 
       <div class="row" style="margin-top:10px;">
-        <button id="btnFree" class="" style="flex:1;">機器番号なし</button>
+        <button id="btnFree" class="primary" style="flex:1;">機器番号なし</button>
         <button id="btnOpenCamera" class="primary cta" style="flex:1;">撮影へ</button>
       </div>
 
-      <div class="meta" style="margin-top:10px;">
-        ① 追加した機器Noを選択 → ② 撮影へ
-      </div>
-      
-      <div class="deviceListRow" style="margin-top:10px;">
-        <div class="keypadLabel">登録済み</div>
-        <div id="deviceList" class="deviceList"></div>
-      </div>
-      
-      <details id="deviceAddPicker" style="margin-top:10px;">
-        <summary>機器Noを追加（001〜199）</summary>
-        <div id="deviceAddGrid" class="devicePad" style="margin-top:10px;"></div>
-        <div class="meta" style="margin-top:10px;">
-          ※押した番号が追加され、すぐ選択状態になります（一覧も切り替わります）。
-        </div>
+      <details id="deviceNoPicker" style="margin-top:10px;">
+        <summary>機器No（001〜199）を選ぶ</summary>
+        <div id="devicePad" class="devicePad" style="margin-top:10px;"></div>
       </details>
 
       <div class="meta" style="margin-top:10px;">
@@ -63,22 +51,6 @@
     </section>
 
     <footer class="footerSpace"></footer>
-  
-    <div id="preview" class="modal hidden">
-      <div class="modalBar">
-        <div id="previewTitle" class="modalTitle"></div>
-        <div class="modalBtns">
-          <button id="zoomOut">-</button>
-          <button id="zoomReset">等倍</button>
-          <button id="zoomIn">+</button>
-          <button id="closePreview" class="danger">閉じる</button>
-        </div>
-      </div>
-      <div class="modalBody">
-        <img id="previewImg" alt="">
-      </div>
-    </div>
-
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/dexie@4/dist/dexie.min.js"></script>

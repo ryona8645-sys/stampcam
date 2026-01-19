@@ -321,7 +321,9 @@ async function init(){
   if (el.camTitle) el.camTitle.textContent = `撮影`;
   if (el.camSub) el.camSub.textContent = `${label}  [${pj || "-"}]`;
 
-      location.href = "./index.html";
+  el.btnBack?.addEventListener("click", async ()=>{
+    await stopCamera();
+    location.href = "./index.html";
   });
 
   el.btnKind?.addEventListener("click", openKindModal);

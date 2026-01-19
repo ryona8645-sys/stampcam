@@ -29,26 +29,12 @@ const el = {
   btnFree: document.getElementById("btnFree"),
   btnOpenCamera: document.getElementById("btnOpenCamera"),
   deviceNoPicker: document.getElementById("deviceNoPicker"),
-  addedDevices: document.getElementById("addedDevices"),
-  deviceGrid: document.getElementById("deviceGrid"),
+  devicePad: document.getElementById("devicePad"),
   activeDeviceBadge: document.getElementById("activeDeviceBadge"),
 
   shotCount: document.getElementById("shotCount"),
   photoMeta: document.getElementById("photoMeta"),
   photoGrid: document.getElementById("photoGrid"),
-
-  deviceList: document.getElementById("deviceList"),
-  deviceAddPicker: document.getElementById("deviceAddPicker"),
-  deviceAddGrid: document.getElementById("deviceAddGrid"),
-
-  // preview modal
-  preview: document.getElementById("preview"),
-  previewImg: document.getElementById("previewImg"),
-  previewTitle: document.getElementById("previewTitle"),
-  closePreview: document.getElementById("closePreview"),
-  zoomIn: document.getElementById("zoomIn"),
-  zoomOut: document.getElementById("zoomOut"),
-  zoomReset: document.getElementById("zoomReset"),
 };
 
 let roomName = "";
@@ -71,56 +57,6 @@ async function upsertDeviceByKey(key, deviceIndex){
     await db.devices.put({ ...existing, roomName, deviceIndex, updatedAt });
     return;
   }
-
-
-async function getRoomDevices(){
-  const devs = await db.devices.where("roomName").equals(roomName).toArray();
-  devs.sort((a,b)=>Number(a.deviceIndex)-Number(b.deviceIndex));
-  return devs;
-}
-
-async function setActiveByIndex(idx){
-  const key = makeDeviceKey(roomName, idx);
-  await upsertDeviceByKey(key, idx);
-  await setMeta("activeDeviceKey", key);
-  setActiveDevice(key);
-  await renderAdded();
-  await renderPhotos();
-  el.photoGrid.scrollIntoView({ behavior:"smooth", block:"start" });
-}
-
-async function renderAdded(){
-  const devs = await getRoomDevices();
-  const indices = new Set(devs.map(d=>Number(d.deviceIndex)));
-  indices.add(0); // always show FREE chip
-  const list = Array.from(indices).sort((a,b)=>a-b);
-
-  el.addedDevices.innerHTML = "";
-  for (const idx of list){
-    const b = document.createElement("button");
-    b.textContent = (idx === 0) ? "番号なし" : formatDeviceIndex(idx);
-    const key = makeDeviceKey(roomName, idx);
-    if (key === activeDeviceKey) b.classList.add("sel");
-    b.addEventListener("click", async ()=>{ await setActiveByIndex(idx); });
-    el.addedDevices.appendChild(b);
-  }
-}
-
-async function renderAddGrid(){
-  el.deviceGrid.innerHTML = "";
-  for (let i=1; i<=199; i++){
-    const b = document.createElement("button");
-    b.textContent = formatDeviceIndex(i);
-    b.addEventListener("click", async ()=>{
-      await setActiveByIndex(i);
-      el.deviceNoPicker.open = false;
-  await renderAddGrid();
-  await renderAdded();
-    });
-    el.deviceGrid.appendChild(b);
-  }
-}
-
   await db.devices.put({ deviceKey:key, roomName, deviceIndex, checked:false, updatedAt });
 }
 async function recomputeChecked(key){
@@ -141,101 +77,28 @@ function setActiveDevice(key){
 
 function clearGrid(){ el.photoGrid.innerHTML = ""; }
 
-let previewUrl = null;
-let modalZoom = 1;
-
-function openPreviewModal(title, blob){
-  if (previewUrl) URL.revokeObjectURL(previewUrl);
-  previewUrl = URL.createObjectURL(blob);
-  modalZoom = 1;
-  el.previewImg.style.transformOrigin = "0 0";
-  el.previewImg.style.transform = `scale(${modalZoom})`;
-  el.previewImg.src = previewUrl;
-  el.previewTitle.textContent = title;
-  el.preview.classList.remove("hidden");
-}
-function closePreviewModal(){
-  el.preview.classList.add("hidden");
-  if (previewUrl){
-    URL.revokeObjectURL(previewUrl);
-    previewUrl = null;
-  }
-}
-function setModalZoom(next){
-  modalZoom = Math.max(0.25, Math.min(6, next));
-  el.previewImg.style.transform = `scale(${modalZoom})`;
+function openPreview(title, url){
+  const w = window.open();
+  if (!w) return;
+  w.document.write(`<title>${title}</title><img src="${url}" style="max-width:100%;height:auto;">`);
 }
 
-
-}
-
-async function listDevicesForRoom(){
-  const all = await db.devices.where("roomName").equals(roomName).toArray();
-  // deviceIndexで昇順固定（選択しても並び替えない）
-  all.sort((a,b)=>Number(a.deviceIndex)-Number(b.deviceIndex));
-  return all;
-}
-
-async function renderDeviceList(){
-  el.deviceList.innerHTML = "";
-
-  // FREE（機器番号なし）は常に先頭固定
-  const freeKey = makeDeviceKey(roomName, 0);
-  const bFree = document.createElement("button");
-  bFree.textContent = "機器番号なし";
-  if (freeKey === activeDeviceKey) bFree.classList.add("sel");
-  bFree.addEventListener("click", async ()=>{
-    await upsertDeviceByKey(freeKey, 0);
-    await setMeta("activeDeviceKey", freeKey);
-    setActiveDevice(freeKey);
-    await renderPhotos();
-    el.photoGrid.scrollIntoView({ behavior:"smooth", block:"start" });
-  });
-  el.deviceList.appendChild(bFree);
-
-  const items = await listDevicesForRoom();
-  for (const d of items){
-    if (Number(d.deviceIndex) === 0) continue; // FREEは上で表示済み
-    const b = document.createElement("button");
-    b.textContent = formatDeviceIndex(d.deviceIndex);
-    if (d.deviceKey === activeDeviceKey) b.classList.add("sel");
-    b.addEventListener("click", async ()=>{
-      await setMeta("activeDeviceKey", d.deviceKey);
-      setActiveDevice(d.deviceKey);
-      await renderPhotos();
-      el.photoGrid.scrollIntoView({ behavior:"smooth", block:"start" });
-    });
-    el.deviceList.appendChild(b);
-  }
-}
-
-async function renderAddGrid(){
-  el.deviceAddGrid.innerHTML = "";
+async function renderDevicePad(){
+  el.devicePad.innerHTML = "";
   for (let i=1; i<=199; i++){
     const b = document.createElement("button");
     b.textContent = formatDeviceIndex(i);
     b.addEventListener("click", async ()=>{
       const key = makeDeviceKey(roomName, i);
       await upsertDeviceByKey(key, i);
-
-      // 追加した番号を即選択 → 写真一覧切替（現場フローに一致）
       await setMeta("activeDeviceKey", key);
       setActiveDevice(key);
-
-      // 一覧を更新して、追加した番号が見える状態にする
-      await renderDeviceList();
       await renderPhotos();
-
-      // 追加パネルは閉じる（邪魔にならない）
-      if (el.deviceAddPicker) el.deviceAddPicker.open = false;
-
       el.photoGrid.scrollIntoView({ behavior:"smooth", block:"start" });
     });
-    el.deviceAddGrid.appendChild(b);
+    el.devicePad.appendChild(b);
   }
 }
-
-
 
 async function renderPhotos(){
   clearGrid();
@@ -269,7 +132,9 @@ async function renderPhotos(){
       </div>
     `;
     card.addEventListener("click", ()=>{
-      openPreviewModal(`${kindLabel} ${t}`, s.blob);
+      const fullUrl = URL.createObjectURL(s.blob);
+      openPreview(`${kindLabel} ${t}`, fullUrl);
+      setTimeout(()=>URL.revokeObjectURL(fullUrl), 60_000);
     });
     el.photoGrid.appendChild(card);
     setTimeout(()=>URL.revokeObjectURL(url), 60_000);
@@ -284,8 +149,7 @@ function goCamera(){
     return;
   }
   const free = String(activeDeviceKey).endsWith("::000") ? "&free=1" : "";
-  const ret = `./room.html?room=${encodeURIComponent(roomName)}`;
-  location.href = `./camera.html?deviceKey=${encodeURIComponent(activeDeviceKey)}${free}&return=${encodeURIComponent(ret)}`;
+  location.href = `./camera.html?deviceKey=${encodeURIComponent(activeDeviceKey)}${free}`;
 }
 
 async function init(){
@@ -295,13 +159,6 @@ async function init(){
     location.href = "./index.html";
     return;
   }
-
-  if (!el.deviceAddGrid) {
-  alert("UI部品が見つかりません：deviceAddGrid が null です（古いキャッシュ or room.htmlのID違い）");
-  return;
-}
-
-  
   projectName = (await getProjectName()).trim();
 
   el.roomTitle.textContent = roomName;
@@ -309,41 +166,19 @@ async function init(){
 
   el.btnBack.addEventListener("click", ()=>location.href="./index.html");
 
-    el.btnFree.addEventListener("click", async ()=>{ await setActiveByIndex(0); });
+  el.btnFree.addEventListener("click", async ()=>{
+    const key = makeDeviceKey(roomName, 0);
+    await upsertDeviceByKey(key, 0);
+    await setMeta("activeDeviceKey", key);
+    setActiveDevice(key);
+    await renderPhotos();
+    el.photoGrid.scrollIntoView({ behavior:"smooth", block:"start" });
   });
 
-  el.btnOpenCamera.addEventListener("click", goCamera);  el.deviceNoPicker.open = false;
-  await renderAddGrid();
-  await renderAdded();
-  await loadRecent();
-  await renderRecent();
-  });
-
-  // allow Enter key
-  document.addEventListener("keydown", async (e)=>{
-    if (e.key === "Enter" && !el.preview.classList.contains("hidden")) return; // modal open
-    if (e.key === "Enter"){
-      const n = parseInput();
-      if (n !== null) await commitDeviceIndex(n);
-    }
-    if (/^[0-9]$/.test(e.key)) pushDigit(e.key);
-    if (e.key === "Backspace") backspace();
-  });
-
-  // preview modal
-  el.closePreview?.addEventListener("click", closePreviewModal);
-  el.preview?.addEventListener("click", (e)=>{ if (e.target === el.preview) closePreviewModal(); });
-  el.zoomIn?.addEventListener("click", ()=>setModalZoom(modalZoom * 1.25));
-  el.zoomOut?.addEventListener("click", ()=>setModalZoom(modalZoom / 1.25));
-  el.zoomReset?.addEventListener("click", ()=>setModalZoom(1));
-  document.addEventListener("keydown", (e)=>{ if (e.key === "Escape") closePreviewModal(); });
-
+  el.btnOpenCamera.addEventListener("click", goCamera);
 
   el.deviceNoPicker.open = false;
-  await renderAddGrid();
-  await renderAdded();
-  await loadRecent();
-  await renderRecent();
+  await renderDevicePad();
 
   const lastKey = await getMeta("activeDeviceKey","");
   if (lastKey && String(lastKey).startsWith(roomName + "::")){
@@ -354,13 +189,5 @@ async function init(){
   }
   await renderPhotos();
 }
-  // 追加グリッドはデフォルト閉
-  el.deviceAddPicker.open = false;
-
-  await renderAddGrid();
-
-  // 登録済み一覧を出す（折りたたみ不要）
-  await renderDeviceList();
-
 
 init();
