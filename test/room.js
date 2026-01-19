@@ -295,6 +295,13 @@ async function init(){
     location.href = "./index.html";
     return;
   }
+
+  if (!el.deviceAddGrid) {
+  alert("UI部品が見つかりません：deviceAddGrid が null です（古いキャッシュ or room.htmlのID違い）");
+  return;
+}
+
+  
   projectName = (await getProjectName()).trim();
 
   el.roomTitle.textContent = roomName;
