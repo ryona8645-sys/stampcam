@@ -500,3 +500,21 @@ input { width:100%; }
   font-variant-numeric: tabular-nums;
 }
 .deviceGrid button:active{ transform: scale(.99); }
+
+/* ===== Device list (stage1) ===== */
+.deviceListRow{ display:flex; flex-direction:column; gap:8px; }
+.deviceList{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.deviceList button{
+  padding:10px 14px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.14);
+  background: rgba(0,0,0,.20);
+  color:#fff;
+  font-weight:900;
+  font-variant-numeric: tabular-nums;
+}
+.deviceList button.sel{ outline:2px solid rgba(255,255,255,.9); }
