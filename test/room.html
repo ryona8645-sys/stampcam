@@ -31,22 +31,20 @@
         <button id="btnOpenCamera" class="primary cta" style="flex:1;">撮影へ</button>
       </div>
 
-      <div class="meta" style="margin-top:10px;">① 番号を追加 → ② 追加済みから選択 → ③ 撮影へ</div>
-
-      <div class="addedRow" style="margin-top:10px;">
-        <div class="keypadLabel">追加済み</div>
-        <div id="addedDevices" class="chipRow"></div>
+      <div class="meta" style="margin-top:10px;">
+        ① 追加した機器Noを選択 → ② 撮影へ
       </div>
-
-      <details id="deviceNoPicker" style="margin-top:10px;">
+      
+      <div class="deviceListRow" style="margin-top:10px;">
+        <div class="keypadLabel">登録済み</div>
+        <div id="deviceList" class="deviceList"></div>
+      </div>
+      
+      <details id="deviceAddPicker" style="margin-top:10px;">
         <summary>機器Noを追加（001〜199）</summary>
-        <div class="addGridWrap" style="margin-top:10px;">
-          <div class="addGridScroll">
-            <div id="deviceGrid" class="deviceGrid"></div>
-          </div>
-          <div class="meta" style="margin-top:10px;">
-            ※押すと追加＋そのまま選択します
-          </div>
+        <div id="deviceAddGrid" class="devicePad" style="margin-top:10px;"></div>
+        <div class="meta" style="margin-top:10px;">
+          ※押した番号が追加され、すぐ選択状態になります（一覧も切り替わります）。
         </div>
       </details>
 
