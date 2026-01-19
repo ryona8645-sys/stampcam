@@ -37,6 +37,10 @@ const el = {
   photoMeta: document.getElementById("photoMeta"),
   photoGrid: document.getElementById("photoGrid"),
 
+  deviceList: document.getElementById("deviceList"),
+  deviceAddPicker: document.getElementById("deviceAddPicker"),
+  deviceAddGrid: document.getElementById("deviceAddGrid"),
+
   // preview modal
   preview: document.getElementById("preview"),
   previewImg: document.getElementById("previewImg"),
@@ -165,6 +169,71 @@ function setModalZoom(next){
 
 }
 
+async function listDevicesForRoom(){
+  const all = await db.devices.where("roomName").equals(roomName).toArray();
+  // deviceIndexで昇順固定（選択しても並び替えない）
+  all.sort((a,b)=>Number(a.deviceIndex)-Number(b.deviceIndex));
+  return all;
+}
+
+async function renderDeviceList(){
+  el.deviceList.innerHTML = "";
+
+  // FREE（機器番号なし）は常に先頭固定
+  const freeKey = makeDeviceKey(roomName, 0);
+  const bFree = document.createElement("button");
+  bFree.textContent = "機器番号なし";
+  if (freeKey === activeDeviceKey) bFree.classList.add("sel");
+  bFree.addEventListener("click", async ()=>{
+    await upsertDeviceByKey(freeKey, 0);
+    await setMeta("activeDeviceKey", freeKey);
+    setActiveDevice(freeKey);
+    await renderPhotos();
+    el.photoGrid.scrollIntoView({ behavior:"smooth", block:"start" });
+  });
+  el.deviceList.appendChild(bFree);
+
+  const items = await listDevicesForRoom();
+  for (const d of items){
+    if (Number(d.deviceIndex) === 0) continue; // FREEは上で表示済み
+    const b = document.createElement("button");
+    b.textContent = formatDeviceIndex(d.deviceIndex);
+    if (d.deviceKey === activeDeviceKey) b.classList.add("sel");
+    b.addEventListener("click", async ()=>{
+      await setMeta("activeDeviceKey", d.deviceKey);
+      setActiveDevice(d.deviceKey);
+      await renderPhotos();
+      el.photoGrid.scrollIntoView({ behavior:"smooth", block:"start" });
+    });
+    el.deviceList.appendChild(b);
+  }
+}
+
+async function renderAddGrid(){
+  el.deviceAddGrid.innerHTML = "";
+  for (let i=1; i<=199; i++){
+    const b = document.createElement("button");
+    b.textContent = formatDeviceIndex(i);
+    b.addEventListener("click", async ()=>{
+      const key = makeDeviceKey(roomName, i);
+      await upsertDeviceByKey(key, i);
+
+      // 追加した番号を即選択 → 写真一覧切替（現場フローに一致）
+      await setMeta("activeDeviceKey", key);
+      setActiveDevice(key);
+
+      // 一覧を更新して、追加した番号が見える状態にする
+      await renderDeviceList();
+      await renderPhotos();
+
+      // 追加パネルは閉じる（邪魔にならない）
+      if (el.deviceAddPicker) el.deviceAddPicker.open = false;
+
+      el.photoGrid.scrollIntoView({ behavior:"smooth", block:"start" });
+    });
+    el.deviceAddGrid.appendChild(b);
+  }
+}
 
 
 
@@ -278,5 +347,13 @@ async function init(){
   }
   await renderPhotos();
 }
+  // 追加グリッドはデフォルト閉
+  el.deviceAddPicker.open = false;
+
+  await renderAddGrid();
+
+  // 登録済み一覧を出す（折りたたみ不要）
+  await renderDeviceList();
+
 
 init();
