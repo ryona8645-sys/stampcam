@@ -3,9 +3,11 @@ const CACHE = "stampcam-test-shell-v1";
 const ASSETS = [
   "./",
   "./index.html",
+  "./room.html",
   "./camera.html",
   "./styles.css",
   "./app.js",
+  "./room.js",
   "./camera.js",
   "./db.js",
   "./manifest.webmanifest",

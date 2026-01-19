@@ -118,7 +118,7 @@ input, select { min-height: 44px; }
 
 /* smaller checkbox row */
 .chkRow { display:flex; align-items:center; gap:10px; }
-.chkRow input[type="checkbox"] { width:10px; height:10px; transform: none; }
+.chkRow input[type="checkbox"] { width:18px; height:18px; transform: none; }
 
 
 
@@ -354,3 +354,104 @@ input { width:100%; }
 .roomCard .roomTitleRow .badge{ margin-left:auto; }
 .roomBtns button.sel{ outline:2px solid rgba(255,255,255,.9); }
 .devicePad.disabled{ opacity:.45; pointer-events:none; filter: grayscale(0.2); }
+
+
+
+/* ===== Room page (v12) ===== */
+.topbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:12px 0 6px;
+}
+.topTitle{ font-size:18px; font-weight:900; line-height:1.1; }
+.topSub{ font-size:12px; opacity:.85; }
+.topActions{ display:flex; gap:8px; }
+
+.grid{
+  display:grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap:10px;
+}
+@media (min-width: 520px){
+  .grid{ grid-template-columns: repeat(3, 1fr); }
+}
+.thumb{
+  border-radius:14px;
+  overflow:hidden;
+  border:1px solid rgba(255,255,255,.12);
+  background: rgba(0,0,0,.25);
+}
+.thumb img{ width:100%; height:140px; object-fit:cover; display:block; background:#000; }
+.thumbMeta{ padding:8px 10px; }
+.thumbKind{ font-weight:900; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.thumbTime{ font-size:11px; opacity:.75; margin-top:2px; font-variant-numeric: tabular-nums; }
+
+.footerSpace{ height:18px; }
+
+
+/* ===== Keypad (v12-3) ===== */
+.keypadWrap{ width:100%; }
+.keypadDisplayRow{
+  display:grid;
+  grid-template-columns: 60px 1fr auto auto auto;
+  gap:8px;
+  align-items:center;
+}
+.keypadLabel{ font-size:12px; opacity:.85; }
+.keypadDisplay{
+  padding:10px 12px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.18);
+  background: rgba(0,0,0,.22);
+  font-weight:900;
+  letter-spacing:.18em;
+  text-align:center;
+  font-variant-numeric: tabular-nums;
+}
+.keypadGrid{
+  display:grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap:10px;
+  margin-top:10px;
+}
+.keypadGrid button{
+  min-height:54px;
+  border-radius:16px;
+  border:1px solid rgba(255,255,255,.14);
+  background: rgba(0,0,0,.20);
+  color:#fff;
+  font-weight:900;
+  font-size:18px;
+}
+.keySmall{
+  min-height:44px;
+  padding:0 10px;
+  border-radius:14px;
+  border:1px solid rgba(255,255,255,.14);
+  background: rgba(0,0,0,.20);
+  color:#fff;
+  font-weight:900;
+}
+.keyOk{
+  min-height:44px;
+  padding:0 14px;
+  border-radius:14px;
+}
+.recentRow{ display:flex; flex-direction:column; gap:8px; }
+.recentBtns{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.recentBtns button{
+  padding:8px 12px;
+  border-radius:999px;
+  border:1px solid rgba(255,255,255,.14);
+  background: rgba(0,0,0,.20);
+  color:#fff;
+  font-weight:900;
+  font-variant-numeric: tabular-nums;
+}
+.recentBtns button.sel{ outline:2px solid rgba(255,255,255,.9); }

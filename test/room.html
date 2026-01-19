@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>部屋</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" content="#0b0b0b">
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <div>
+        <div class="topTitle" id="roomTitle">部屋</div>
+        <div class="topSub" id="roomSub"></div>
+      </div>
+      <div class="topActions">
+        <button id="btnBack" class="primary">戻る</button>
+      </div>
+    </header>
+
+    <section class="card">
+      <div class="sectionTitleRow">
+        <h2 style="margin:0;">機器選択</h2>
+        <span class="badge" id="activeDeviceBadge">未選択</span>
+      </div>
+
+      <div class="row" style="margin-top:10px;">
+        <button id="btnFree" class="primary" style="flex:1;">機器番号なし</button>
+        <button id="btnOpenCamera" class="primary cta" style="flex:1;">撮影へ</button>
+      </div>
+
+      <details id="deviceNoPicker" style="margin-top:10px;">
+        <summary>機器No（001〜199）を入力</summary>
+
+        <div class="keypadWrap" style="margin-top:10px;">
+          <div class="keypadDisplayRow">
+            <div class="keypadLabel">機器No</div>
+            <div id="deviceInput" class="keypadDisplay">---</div>
+            <button id="btnKeyBack" class="keySmall">⌫</button>
+            <button id="btnKeyClear" class="keySmall">CLR</button>
+            <button id="btnKeyOk" class="primary cta keyOk">決定</button>
+          </div>
+
+          <div class="keypadGrid" id="keypadGrid"></div>
+
+          <div class="meta" style="margin-top:10px;">
+            ※3桁入力して「決定」。範囲外は弾きます。
+          </div>
+
+          <div class="recentRow" style="margin-top:10px;">
+            <div class="keypadLabel">最近</div>
+            <div id="recentDevices" class="recentBtns"></div>
+          </div>
+        </div>
+      </details>
+
+      <div class="meta" style="margin-top:10px;">
+        ※番号を押すと「選択中」が切り替わり、写真一覧も切り替わります。
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="sectionTitleRow">
+        <h2 style="margin:0;">写真一覧</h2>
+        <span class="badge" id="shotCount">0枚</span>
+      </div>
+      <div id="photoMeta" class="meta" style="margin-top:8px;"></div>
+      <div id="photoGrid" class="grid" style="margin-top:10px;"></div>
+    </section>
+
+    <footer class="footerSpace"></footer>
+  
+    <div id="preview" class="modal hidden">
+      <div class="modalBar">
+        <div id="previewTitle" class="modalTitle"></div>
+        <div class="modalBtns">
+          <button id="zoomOut">-</button>
+          <button id="zoomReset">等倍</button>
+          <button id="zoomIn">+</button>
+          <button id="closePreview" class="danger">閉じる</button>
+        </div>
+      </div>
+      <div class="modalBody">
+        <img id="previewImg" alt="">
+      </div>
+    </div>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/dexie@4/dist/dexie.min.js"></script>
+  <script type="module" src="./room.js"></script>
+</body>
+</html>

@@ -26,33 +26,30 @@
       <input id="floorName" placeholder="部屋名（例：1F事務所 / 2F機械室）" />
       <button id="btnAddRoom" class="primary">追加</button>
     </div>
-    <div class="hint">※部屋を追加 → 機器No選択(001-199) → 部屋内の機器番号を選択 → 撮影へ</div>
+    <div class="hint">※部屋をタップして詳細へ → その部屋の機器選択/写真一覧/撮影へ。
+    <br>※(1) 部屋を追加 → (2) 部屋選択で「選択」→ (3) 機器No選択(001-199) → (4) 部屋内の機器番号を選択 → (5) 撮影へ</div>
   </section>
 
   <section class="panel">
     <h2>部屋選択</h2>
     <div id="roomList" class="roomList"></div>
 
-   
+    <div class="row" style="margin-top:10px;">
+      <label class="chkRow">
+        <input type="checkbox" id="onlyIncomplete">
+        <span>未完了のみ</span>
+      </label>
+    </div>
   </section>
 
   <section class="panel">
-    <details id="deviceNoPicker">
-      <summary class="summaryRow">
-        <span>機器No選択（001〜199）</span>
-        <span id="activeRoomLabel" class="pill"></span>
-      </summary>
-
-      <div id="devicePad" class="devicePad"></div>
-    </details>
-  </section>
+    </section>
 
   <section class="panel">
     <div class="row space">
       <h2>写真一覧</h2>
       <button id="btnOpenCamera" class="primary cta">撮影へ</button>
     </div>
-    <div id="activeDeviceInfo" class="meta" style="font-weight:900;"></div>
     <div id="photoMeta" class="meta"></div>
     <div id="photoGrid" class="shots"></div>
   </section>
