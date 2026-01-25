@@ -200,12 +200,59 @@
   const backdrop=document.getElementById('backdrop');
 
   let stream=null,useHigh=false,currentLabel='',previewUrl=null;
+
   let leftOpen=false, rightOpen=false;
   let videoTrack=null;
   let torchOn=false;
+  resBtn.textContent = (useHigh?'3840×2160':'1280×720');
+
 
   /* ==== 保存方式設定 ==== */
   const SAVE_MODE = 'auto'; // 'auto' | 'opfs' | 'picker'
+
+  /* ==== 状態保存（更新してもリセットされない） ==== */
+  const STORAGE_KEY = 'stampcam_state_v1';
+
+  function readState(){
+    try{ return JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null'); }
+    catch{ return null; }
+  }
+  function snapshotState(){
+    const countsObj = {};
+    try{
+      for (const [k,v] of shotCounts.entries()) countsObj[k]=v;
+    }catch{}
+    const shotLabels = [...nums.children]
+      .filter(b=>b.classList.contains('shot'))
+      .map(b=>b.dataset.label || b.textContent);
+    return {
+      v:1,
+      useHigh: !!useHigh,
+      currentLabel: currentLabel || '',
+      suffix: suffixInput.value || '',
+      counts: countsObj,
+      shotLabels,
+      savedAt: Date.now()
+    };
+  }
+  let _saveT=null;
+  function saveState(debounceMs=80){
+    try{
+      clearTimeout(_saveT);
+      _saveT=setTimeout(()=>{
+        try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshotState())); }catch{}
+      }, debounceMs);
+    }catch{}
+  }
+
+  const __savedState = readState();
+  let __restoreLabel = __savedState?.currentLabel || '';
+  let __restoreSuffix = __savedState?.suffix || '';
+  let __restoreCounts = __savedState?.counts || null;
+  let __restoreShotLabels = Array.isArray(__savedState?.shotLabels) ? __savedState.shotLabels : [];
+  if (__savedState && typeof __savedState.useHigh === 'boolean') {
+    useHigh = __savedState.useHigh;
+  }
 
   /* ---------- Toast ---------- */
   let toastTimer=null;
@@ -229,6 +276,7 @@
     if(!badge){ badge = document.createElement('span'); badge.className='badge'; btn.appendChild(badge); }
     badge.textContent = String(n);
     badge.classList.toggle('show', n>0);
+    saveState();
   }
   function incCount(label){
     const cur = shotCounts.get(label) || 0;
@@ -239,6 +287,7 @@
     [...nums.children].forEach(btn=>{
       const b = btn.querySelector('.badge'); if(b){ b.textContent='0'; b.classList.remove('show'); }
     });
+    saveState();
   }
 
   /* ---------- Buttons: "-" then 1..99 ---------- */
@@ -253,15 +302,22 @@
     b.onclick=()=>setLabel(b.dataset.label);
     nums.appendChild(b);
   }
-  setTimeout(()=>{ [...nums.children].forEach(btn=>setCount(btn.dataset.label||btn.textContent, 0)); },0);
+    [...nums.children].forEach(btn=>setCount(btn.dataset.label||btn.textContent, 0));
 
-  function setLabel(label){
+  if(__restoreSuffix) suffixInput.value = __restoreSuffix;
+  if(__restoreCounts){ for(const [k,v] of Object.entries(__restoreCounts)){ const n=Number(v); if(Number.isFinite(n)) setCount(k,n);} }
+  if(__restoreShotLabels){ __restoreShotLabels.forEach(l=>{ const b=getBtnByLabel(l); if(b) b.classList.add('shot'); }); }
+  if(__restoreLabel) setLabel(__restoreLabel);
+  saveState(0);
+
+function setLabel(label){
     currentLabel=label;
     [...nums.children].forEach(x=>{
       const on=(x.dataset.label===label)||(!x.dataset.label && x.textContent===label);
       x.classList.toggle('on', on);
       x.setAttribute('aria-pressed', on);
     });
+    saveState();
   }
 
   /* ---------- Camera ---------- */
@@ -324,6 +380,7 @@
   resBtn.addEventListener('click', async ()=>{
     useHigh=!useHigh;
     resBtn.textContent=(useHigh?'3840×2160':'1280×720');
+    saveState();
     await startCamera();
   });
 
@@ -421,6 +478,8 @@
     }
   }
   shootBtn.addEventListener('click', doShoot);
+
+  suffixInput.addEventListener('input', ()=>saveState(120));
 
   resetMarkBtn.addEventListener('click', ()=>{
     [...nums.children].forEach(x=>x.classList.remove('shot'));
